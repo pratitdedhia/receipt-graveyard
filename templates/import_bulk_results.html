@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% block title %}Batch #{{ batch.id }} Results · Receipt Graveyard{% endblock %}
+
+{% block content %}
+<div class="admin-head-row">
+  <div>
+    <div class="eyebrow-chip">STEP 3 OF 3 · INGESTION MONITOR & AUDIT STAGING</div>
+    <h1 class="page-title">Batch #{{ batch.id }} Results: <span>{{ batch.filename }}</span></h1>
+    <p class="page-intro">
+      Real-time progress for Google Drive receipt downloads and high-accuracy OCR extraction.
+      Review field extractions, confidence scores, duplicate flags, and arithmetic verification.
+      Once verified, commit ready records directly into the primary corporate finance audit queue.
+    </p>
+  </div>
+  <div class="hero-actions" style="margin-top:0;">
+    <a href="{{ url_for('import_bulk') }}" class="btn btn-outline">
+      ← Back to All Batches
+    </a>
+  </div>
+</div>
+
+<!-- Progress and Polling Bar -->
+<section class="admin-block" style="margin-bottom: 25px; padding: 20px;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+    <div>
+      <span style="font-size: 11px; font-family: var(--font-mono); color: var(--ink-muted); text-transform: uppercase;">
+        BATCH STATUS
+      </span>
+      <div style="display: flex; align-items: center; gap: 10px; margin-top: 4px;">
+        <span id="batchStatusBadge" class="status-pill {% if batch.status == 'COMPLETED' %}status-approved{% elif batch.status == 'PROCESSING' %}status-review{% else %}status-needs-info{% endif %}">
+          {{ batch.status }}
+        </span>
+        <span id="batchProgressText" style="font-size: 13px; font-weight: 600; color: var(--ink-800);">
+          {{ batch.completed_rows }} / {{ batch.total_rows }} rows processed
+        </span>
+      </div>
+    </div>
+
+    <!-- Commit Action Form -->
+    <form method="post" action="{{ url_for('import_bulk_commit', batch_id=batch.id) }}" onsubmit="return confirm('Commit all READY_FOR_AUDIT and verified receipts from this batch into the primary Corporate Audit Queue?');">
+      <button type="submit" class="btn btn-primary" style="padding: 10px 22px; font-weight: 700; box-shadow: 0 4px 12px rgba(22, 122, 73, 0.25);">
+        📥 Commit Validated Receipts to Audit Queue →
+      </button>
+    </form>
+  </div>
+
+  <!-- Progress Bar Line -->
+  {% set pct = ((batch.completed_rows / (batch.total_rows or 1)) * 100)|round|int %}
+  <div style="background: #e2ece6; border-radius: 8px; height: 10px; overflow: hidden; width: 100%;">
+    <div id="progressBarFill" style="background: linear-gradient(90deg, #10b981 0%, #059669 100%); height: 100%; width: {{ pct }}%; transition: width 0.4s ease;"></div>
+  </div>
+</section>
+
+<!-- Rows Results Ledger -->
+<section class="admin-block">
+  <div class="block-header-row">
+    <div>
+      <span class="card-eyebrow">EXTRACTED RECEIPT RECORDS</span>
+      <h2 class="block-title">Row-by-Row Extraction & Verification Ledger ({{ rows|length }})</h2>
+    </div>
+    <div style="display: flex; gap: 8px; font-size: 12px;">
+      <span class="badge" style="background: #e8f7ee; color: #13633c;">✓ Ready for Audit</span>
+      <span class="badge" style="background: #fef3c7; color: #92400e;">⚠️ Needs Verification</span>
+      <span class="badge" style="background: #fee2e2; color: #991b1b;">✕ Duplicate</span>
+      <span class="badge" style="background: #f1f5f9; color: #475569;">🔒 Access Required</span>
+    </div>
+  </div>
+
+  <div class="table-container" style="overflow-x: auto;">
+    <table class="data-table" id="rowsTable">
+      <thead>
+        <tr>
+          <th>ROW #</th>
+          <th>EMPLOYEE</th>
+          <th>RECEIPT LINK</th>
+          <th>EXTRACTED MERCHANT</th>
+          <th>DATE</th>
+          <th>TOTAL AMOUNT</th>
+          <th>OCR CONFIDENCE</th>
+          <th>ARITHMETIC</th>
+          <th>STATUS</th>
+          <th>ACTION / NOTE</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if rows %}
+          {% for r in rows %}
+          <tr id="row-{{ r.id }}">
+            <td>
+              <span class="table-mono">#{{ r.source_row_num }}</span>
+            </td>
+            <td>
+              <strong>{{ r.mapped_employee }}</strong>
+            </td>
+            <td>
+              {% if r.receipt_url %}
+                <a href="{{ r.receipt_url }}" target="_blank" class="table-link" title="{{ r.receipt_url }}" style="max-width: 160px; display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                  📁 Drive Link ↗
+                </a>
+              {% else %}
+                <span style="color: var(--ink-subtle);">None</span>
+              {% endif %}
+            </td>
+            <td>
+              <strong>{{ r.extracted.merchant or '—' }}</strong>
+            </td>
+            <td>
+              <span class="table-mono">{{ r.extracted.date or '—' }}</span>
+            </td>
+            <td>
+              {% if r.extracted.extracted_total %}
+                <strong style="color: var(--ink-900); font-family: var(--font-mono);">
+                  {{ r.extracted.currency or 'INR' }} {{ "{:,.2f}".format(r.extracted.extracted_total) }}
+                </strong>
+                {% if r.extracted.candidate_totals and r.extracted.candidate_totals|length > 1 %}
+                  <span title="Multiple candidate totals detected: {{ r.extracted.candidate_totals|join(', ') }}" style="cursor: help; color: var(--amber-600); margin-left: 2px;">ℹ</span>
+                {% endif %}
+              {% else %}
+                <span style="color: var(--ink-muted);">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if r.ocr_confidence is not none %}
+                {% set conf_pct = (r.ocr_confidence * 100)|round|int %}
+                {% if conf_pct >= 90 %}
+                  <span class="badge" style="background: #e8f7ee; color: #13633c; font-weight: 700;">{{ conf_pct }}% High</span>
+                {% elif conf_pct >= 70 %}
+                  <span class="badge" style="background: #fef3c7; color: #92400e; font-weight: 700;">{{ conf_pct }}% Med</span>
+                {% else %}
+                  <span class="badge" style="background: #fee2e2; color: #991b1b; font-weight: 700;">{{ conf_pct }}% Low</span>
+                {% endif %}
+              {% else %}
+                <span class="badge badge-neutral">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if r.extracted.math_status == 'Verified' %}
+                <span style="color: var(--green-600); font-weight: 600; font-size: 12px;">✓ Verified</span>
+              {% elif r.extracted.math_status == 'Discrepancy' %}
+                <span style="color: var(--red-600); font-weight: 600; font-size: 12px;" title="Discrepancy: ₹{{ r.extracted.math_discrepancy }}">✕ Discrepancy</span>
+              {% else %}
+                <span style="color: var(--ink-muted); font-size: 12px;">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if r.import_status == 'READY_FOR_AUDIT' %}
+                <span class="status-pill status-approved">READY FOR AUDIT</span>
+              {% elif r.import_status == 'NEEDS_VERIFICATION' %}
+                <span class="status-pill status-needs-info">NEEDS VERIFICATION</span>
+              {% elif r.import_status == 'DUPLICATE_DETECTED' %}
+                <span class="status-pill status-rejected">DUPLICATE DETECTED</span>
+              {% elif r.import_status == 'ACCESS_REQUIRED' %}
+                <span class="status-pill" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;">ACCESS REQUIRED</span>
+              {% elif r.import_status == 'IMPORTED' %}
+                <span class="status-pill" style="background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd;">✓ COMMITTED</span>
+              {% else %}
+                <span class="status-pill status-neutral">{{ r.import_status }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if r.linked_expense_id %}
+                <a href="{{ url_for('expense_detail', expense_id=r.linked_expense_id) }}" class="btn btn-sm btn-outline">
+                  Open Claim #{{ r.linked_expense_id }} →
+                </a>
+              {% elif r.error_message %}
+                <span style="font-size: 11.5px; color: var(--red-600); display: inline-block; max-width: 220px;" title="{{ r.error_message }}">
+                  {{ r.error_message }}
+                </span>
+              {% else %}
+                <span style="color: var(--green-600); font-size: 12px;">✓ Ready</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="10" style="text-align: center; padding: 30px; color: var(--ink-muted);">
+              No rows parsed for this batch.
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- Polling Script for Background Worker Updates -->
+<script>
+(function() {
+  const batchStatus = "{{ batch.status }}";
+  if (batchStatus === "PROCESSING" || batchStatus === "PENDING") {
+    const batchId = {{ batch.id }};
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/import-bulk/batch/${batchId}/status`);
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        if (data.status) {
+          const badge = document.getElementById("batchStatusBadge");
+          if (badge) {
+            badge.textContent = data.status;
+            if (data.status === "COMPLETED") {
+              badge.className = "status-pill status-approved";
+              clearInterval(interval);
+              setTimeout(() => window.location.reload(), 1200);
+            }
+          }
+          
+          const progText = document.getElementById("batchProgressText");
+          if (progText) {
+            progText.textContent = `${data.completed_rows} / ${data.total_rows} rows processed`;
+          }
+          
+          const fill = document.getElementById("progressBarFill");
+          if (fill && data.total_rows > 0) {
+            const pct = Math.round((data.completed_rows / data.total_rows) * 100);
+            fill.style.width = pct + "%";
+          }
+        }
+      } catch (e) {
+        console.error("Status polling error:", e);
+      }
+    }, 2500);
+  }
+})();
+</script>
+{% endblock %}

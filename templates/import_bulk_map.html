@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}Map Columns · Batch #{{ batch.id }} · Receipt Graveyard{% endblock %}
+
+{% block content %}
+<div class="admin-head-row">
+  <div>
+    <div class="eyebrow-chip">STEP 2 OF 3 · COLUMN MAPPING & VALIDATION</div>
+    <h1 class="page-title">Confirm Column Mapping: <span>Batch #{{ batch.id }}</span></h1>
+    <p class="page-intro">
+      We inspected worksheet <strong>"{{ batch.worksheet }}"</strong> in <strong>{{ batch.filename }}</strong>. 
+      Verify the auto-detected columns below. Once confirmed, the system will download the Google Drive receipts and process them through the high-accuracy OCR pipeline.
+    </p>
+  </div>
+  <div class="hero-actions" style="margin-top:0;">
+    <a href="{{ url_for('import_bulk') }}" class="btn btn-outline">
+      ← Cancel / Back to Batches
+    </a>
+  </div>
+</div>
+
+<form method="post" action="{{ url_for('import_bulk_map', batch_id=batch.id) }}">
+  <!-- Mapping Configuration Card -->
+  <section class="admin-block" style="margin-bottom: 25px;">
+    <div class="block-header-row">
+      <div>
+        <span class="card-eyebrow">FIELD ASSIGNMENTS</span>
+        <h2 class="block-title">Target Schema Column Mapping</h2>
+      </div>
+      <div>
+        <span class="badge badge-neutral">Total Rows: {{ batch.total_rows }}</span>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; padding: 10px 0;">
+      <!-- Employee Identifier (Mandatory) -->
+      <div class="form-group" style="background: #f8faf9; padding: 14px; border-radius: 8px; border: 1px solid var(--border-card);">
+        <label class="form-label" style="font-weight: 700; color: var(--ink-900); display: flex; justify-content: space-between;">
+          <span>👤 Employee Name / Email *</span>
+          <span style="color: var(--green-600); font-size: 11px;">Mandatory</span>
+        </label>
+        <select name="col_employee" class="form-control" required style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border-card); font-family: var(--font-body);">
+          <option value="">-- Select Column --</option>
+          {% for h in headers %}
+            <option value="{{ h }}" {% if auto_map.employee is not none and headers[auto_map.employee] == h %}selected{% endif %}>
+              {{ h }}
+            </option>
+          {% endfor %}
+        </select>
+        <small style="color: var(--ink-muted); font-size: 11px; margin-top: 4px; display: block;">Maps expense to employee profile</small>
+      </div>
+
+      <!-- Receipt Google Drive URL (Mandatory) -->
+      <div class="form-group" style="background: #f0fdf4; padding: 14px; border-radius: 8px; border: 1px solid #bbf7d0;">
+        <label class="form-label" style="font-weight: 700; color: #166534; display: flex; justify-content: space-between;">
+          <span>🔗 Google Drive Receipt URL *</span>
+          <span style="color: var(--green-600); font-size: 11px;">Mandatory</span>
+        </label>
+        <select name="col_receipt_url" class="form-control" required style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #86efac; font-family: var(--font-body); font-weight: 600;">
+          <option value="">-- Select Column --</option>
+          {% for h in headers %}
+            <option value="{{ h }}" {% if auto_map.receipt_url is not none and headers[auto_map.receipt_url] == h %}selected{% endif %}>
+              {{ h }}
+            </option>
+          {% endfor %}
+        </select>
+        <small style="color: #15803d; font-size: 11px; margin-top: 4px; display: block;">Link to image, bill screenshot, or PDF invoice</small>
+      </div>
+
+      <!-- Merchant / Vendor -->
+      <div class="form-group" style="background: #f8faf9; padding: 14px; border-radius: 8px; border: 1px solid var(--border-card);">
+        <label class="form-label" style="font-weight: 600; color: var(--ink-800);">
+          🏪 Merchant / Vendor (Optional)
+        </label>
+        <select name="col_merchant" class="form-control" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border-card);">
+          <option value="">-- None / Extract via OCR --</option>
+          {% for h in headers %}
+            <option value="{{ h }}" {% if auto_map.merchant is not none and headers[auto_map.merchant] == h %}selected{% endif %}>
+              {{ h }}
+            </option>
+          {% endfor %}
+        </select>
+        <small style="color: var(--ink-muted); font-size: 11px; margin-top: 4px; display: block;">If blank, OCR extraction will supply merchant</small>
+      </div>
+
+      <!-- Date -->
+      <div class="form-group" style="background: #f8faf9; padding: 14px; border-radius: 8px; border: 1px solid var(--border-card);">
+        <label class="form-label" style="font-weight: 600; color: var(--ink-800);">
+          📅 Transaction Date (Optional)
+        </label>
+        <select name="col_date" class="form-control" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border-card);">
+          <option value="">-- None / Extract via OCR --</option>
+          {% for h in headers %}
+            <option value="{{ h }}" {% if auto_map.date is not none and headers[auto_map.date] == h %}selected{% endif %}>
+              {{ h }}
+            </option>
+          {% endfor %}
+        </select>
+        <small style="color: var(--ink-muted); font-size: 11px; margin-top: 4px; display: block;">Workbook date or OCR fallback</small>
+      </div>
+
+      <!-- Amount -->
+      <div class="form-group" style="background: #f8faf9; padding: 14px; border-radius: 8px; border: 1px solid var(--border-card);">
+        <label class="form-label" style="font-weight: 600; color: var(--ink-800);">
+          💰 Claimed Total Amount (Optional)
+        </label>
+        <select name="col_amount" class="form-control" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border-card);">
+          <option value="">-- None / Extract via OCR --</option>
+          {% for h in headers %}
+            <option value="{{ h }}" {% if auto_map.amount is not none and headers[auto_map.amount] == h %}selected{% endif %}>
+              {{ h }}
+            </option>
+          {% endfor %}
+        </select>
+        <small style="color: var(--ink-muted); font-size: 11px; margin-top: 4px; display: block;">If blank, OCR high-accuracy total is used</small>
+      </div>
+
+      <!-- Currency -->
+      <div class="form-group" style="background: #f8faf9; padding: 14px; border-radius: 8px; border: 1px solid var(--border-card);">
+        <label class="form-label" style="font-weight: 600; color: var(--ink-800);">
+          💱 Currency (Optional)
+        </label>
+        <select name="col_currency" class="form-control" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border-card);">
+          <option value="">-- Auto-infer (INR / USD / EUR) --</option>
+          {% for h in headers %}
+            <option value="{{ h }}" {% if auto_map.currency is not none and headers[auto_map.currency] == h %}selected{% endif %}>
+              {{ h }}
+            </option>
+          {% endfor %}
+        </select>
+        <small style="color: var(--ink-muted); font-size: 11px; margin-top: 4px; display: block;">Default INR if unspecified</small>
+      </div>
+
+      <!-- Category -->
+      <div class="form-group" style="background: #f8faf9; padding: 14px; border-radius: 8px; border: 1px solid var(--border-card);">
+        <label class="form-label" style="font-weight: 600; color: var(--ink-800);">
+          🏷️ Category (Optional)
+        </label>
+        <select name="col_category" class="form-control" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border-card);">
+          <option value="">-- Auto-categorize via Merchant --</option>
+          {% for h in headers %}
+            <option value="{{ h }}" {% if auto_map.category is not none and headers[auto_map.category] == h %}selected{% endif %}>
+              {{ h }}
+            </option>
+          {% endfor %}
+        </select>
+        <small style="color: var(--ink-muted); font-size: 11px; margin-top: 4px; display: block;">Meals, Travel, Hotel, etc.</small>
+      </div>
+
+      <!-- Notes / Purpose -->
+      <div class="form-group" style="background: #f8faf9; padding: 14px; border-radius: 8px; border: 1px solid var(--border-card);">
+        <label class="form-label" style="font-weight: 600; color: var(--ink-800);">
+          📝 Business Purpose / Notes (Optional)
+        </label>
+        <select name="col_description" class="form-control" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border-card);">
+          <option value="">-- None --</option>
+          {% for h in headers %}
+            <option value="{{ h }}" {% if auto_map.description is not none and headers[auto_map.description] == h %}selected{% endif %}>
+              {{ h }}
+            </option>
+          {% endfor %}
+        </select>
+        <small style="color: var(--ink-muted); font-size: 11px; margin-top: 4px; display: block;">Business rationale or project context</small>
+      </div>
+    </div>
+  </section>
+
+  <!-- Live Sample Preview of First 5 Rows -->
+  <section class="admin-block" style="margin-bottom: 25px;">
+    <div class="block-header-row">
+      <div>
+        <span class="card-eyebrow">DATA SANITY CHECK</span>
+        <h2 class="block-title">Workbook Data Preview (First 5 Rows)</h2>
+      </div>
+    </div>
+
+    <div class="table-container" style="overflow-x: auto;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th style="width: 60px;">ROW #</th>
+            {% for h in headers %}
+              <th>{{ h }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for sample in samples %}
+          <tr>
+            <td>
+              <span class="table-mono">#{{ loop.index + 1 }}</span>
+            </td>
+            {% for h in headers %}
+              <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ sample.get(h, '') }}">
+                {{ sample.get(h, '') }}
+              </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Action Bar -->
+  <div style="display: flex; justify-content: flex-end; gap: 14px; margin-top: 15px;">
+    <a href="{{ url_for('import_bulk') }}" class="btn btn-outline">Cancel</a>
+    <button type="submit" class="btn btn-primary" style="padding: 12px 28px; font-size: 14px;">
+      🚀 Start Ingestion & OCR Pipeline →
+    </button>
+  </div>
+</form>
+{% endblock %}

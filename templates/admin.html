@@ -1,0 +1,510 @@
+{% extends "base.html" %}
+{% block title %}Enterprise Governance & Admin Console · Receipt Graveyard{% endblock %}
+
+{% block content %}
+<div class="admin-head-row">
+  <div>
+    <div class="eyebrow-chip">ORGANIZATION-WIDE GOVERNANCE · ADMIN CONSOLE</div>
+    <h1 class="page-title">Enterprise Control & <span>Policy Administration</span></h1>
+    <p class="page-intro">
+      Manage employee and accounts personnel, configure enterprise projects with per-person auto-approval caps, adjust multi-tier approval thresholds, ingest historical datasets, and export financial audit packages.
+    </p>
+  </div>
+  <div class="hero-actions" style="margin-top:0;">
+    <a href="{{ url_for('export_standardized_zip') }}" class="btn btn-primary">
+      📦 Standardized 8-File Export (.zip)
+    </a>
+  </div>
+</div>
+
+<!-- Executive Summary Counters -->
+<section class="metrics-grid" style="margin-bottom: 25px;">
+  <div class="metric-card">
+    <div class="metric-head">
+      <span class="metric-label">REGISTERED STAFF</span>
+      <span class="metric-icon">👥</span>
+    </div>
+    <div class="metric-value">{{ users|length }}</div>
+    <div class="metric-sub">Employees & Finance Personnel</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-head">
+      <span class="metric-label">ENTERPRISE PROJECTS</span>
+      <span class="metric-icon">📁</span>
+    </div>
+    <div class="metric-value color-green">{{ projects|length }}</div>
+    <div class="metric-sub">With configured reimbursement caps</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-head">
+      <span class="metric-label">SYSTEM AUTO-CAP</span>
+      <span class="metric-icon">🛡️</span>
+    </div>
+    <div class="metric-value color-amber">₹{{ "{:,.0f}".format(system_settings.auto_approval_cap) }}</div>
+    <div class="metric-sub">Default fallback threshold</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-head">
+      <span class="metric-label">EDITING WINDOW</span>
+      <span class="metric-icon">⏱️</span>
+    </div>
+    <div class="metric-value">{{ system_settings.editing_window_hours }}h</div>
+    <div class="metric-sub">Post-submission grace period</div>
+  </div>
+</section>
+
+<!-- Section 1: Staff Roster & User Account Management -->
+<section class="admin-block">
+  <div class="block-header-row">
+    <div>
+      <span class="card-eyebrow">USER ROLES & ACCESS CONTROL</span>
+      <h2 class="block-title">Staff Roster & Accounts Management ({{ users|length }})</h2>
+    </div>
+    <div>
+      <button type="button" class="btn btn-sm btn-accent" onclick="toggleAddUserModal()">
+        + Add New Staff Profile
+      </button>
+    </div>
+  </div>
+
+  <div class="table-container">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>USER / EMPLOYEE</th>
+          <th>ROLE</th>
+          <th>DEPARTMENT</th>
+          <th>MAPPED HOME OFFICE</th>
+          <th>STATUS</th>
+          <th>ACTIONS</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td>
+            <div class="emp-user-cell">
+              <div class="emp-user-avatar" style="background: {{ u.avatar_color or '#0f766e' }};">
+                {{ u.name[:2]|upper }}
+              </div>
+              <div>
+                <strong>{{ u.name }}</strong>
+                <div class="table-sub">{{ u.email }} · {{ u.phone or 'No phone' }}</div>
+              </div>
+            </div>
+          </td>
+
+          <td>
+            <span class="status-pill {% if u.role == 'admin' %}status-duplicate{% elif u.role == 'accounts' %}status-approved{% else %}status-needs-info{% endif %}">
+              {{ u.role|upper }}
+            </span>
+          </td>
+
+          <td>{{ u.department or 'General Operations' }}</td>
+
+          <td>
+            <div class="mapped-office-badge">
+              <span class="office-pin">📍</span>
+              <strong>{{ u.office_name or 'Unassigned' }}</strong>
+              <div class="table-sub">{{ u.office_city or 'HQ' }} (Cap: ₹{{ "{:,.0f}".format(u.local_meal_cap or 1200) }})</div>
+            </div>
+          </td>
+
+          <td>
+            {% if u.is_active is defined and not u.is_active %}
+              <span class="status-pill status-rejected">DEACTIVATED</span>
+            {% else %}
+              <span class="status-pill status-approved">ACTIVE</span>
+            {% endif %}
+          </td>
+
+          <td>
+            <div style="display:flex; gap:6px; align-items:center;">
+              <form method="post" action="{{ url_for('update_user') }}" style="display:inline-flex; gap:4px;">
+                <input type="hidden" name="user_id" value="{{ u.id }}">
+                <input type="hidden" name="department" value="{{ u.department or '' }}">
+                <input type="hidden" name="phone" value="{{ u.phone or '' }}">
+                <input type="hidden" name="office_id" value="{{ u.office_id or 1 }}">
+                <select name="role" class="form-input form-input-sm" style="width:105px;">
+                  <option value="employee" {% if u.role == 'employee' %}selected{% endif %}>Employee</option>
+                  <option value="accounts" {% if u.role == 'accounts' %}selected{% endif %}>Accounts</option>
+                  <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>Admin</option>
+                </select>
+                <button type="submit" class="btn btn-sm btn-secondary" title="Save role change">Save</button>
+              </form>
+
+              {% if u.id != current_user.id %}
+              <form method="post" action="{{ url_for('toggle_user_status', user_id=u.id) }}" style="display:inline;">
+                {% if u.is_active is defined and not u.is_active %}
+                  <button type="submit" class="btn btn-sm btn-outline-green" title="Reactivate user profile">
+                    Activate
+                  </button>
+                {% else %}
+                  <button type="submit" class="btn btn-sm btn-ghost-danger" title="Soft deactivate user profile">
+                    Deactivate
+                  </button>
+                {% endif %}
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- Section 2: Enterprise Projects & Reimbursement Caps -->
+<section class="admin-block" style="margin-top: 30px;">
+  <div class="block-header-row">
+    <div>
+      <span class="card-eyebrow">PROJECT GOVERNANCE & REIMBURSEMENT CAPS</span>
+      <h2 class="block-title">Active Projects & Auto-Approval Caps ({{ projects|length }})</h2>
+    </div>
+    <div>
+      <button type="button" class="btn btn-sm btn-accent" onclick="toggleAddProjectModal()">
+        + Register New Project
+      </button>
+    </div>
+  </div>
+
+  <div class="table-container">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>PROJECT CODE</th>
+          <th>PROJECT NAME & CLIENT</th>
+          <th>BUDGET</th>
+          <th>PER-PERSON AUTO-APPROVAL CAP</th>
+          <th>STATUS</th>
+          <th>ACTIONS</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in projects %}
+        <tr>
+          <td>
+            <span class="id-badge font-mono" style="font-size:0.85rem;">{{ p.code }}</span>
+          </td>
+
+          <td>
+            <strong>{{ p.name }}</strong>
+            <div class="table-sub">Client: {{ p.client_name or 'Internal / Multi-client' }} · Mgr: {{ p.manager_name or 'Unassigned' }}</div>
+          </td>
+
+          <td class="font-mono">₹{{ "{:,.2f}".format(p.budget or 0) }}</td>
+
+          <td>
+            <form method="post" action="{{ url_for('update_project_cap', project_id=p.id) }}" class="reassign-inline-form">
+              <span class="font-mono" style="font-weight:700;">₹</span>
+              <input type="number" step="100" name="cap" value="{{ p.auto_approval_cap or 5000 }}" class="form-input form-input-sm font-mono" style="width:110px;">
+              <button type="submit" class="btn btn-sm btn-primary">Update Cap</button>
+            </form>
+          </td>
+
+          <td>
+            <span class="status-pill {% if p.status == 'Active' %}status-approved{% elif p.status == 'Archived' %}status-rejected{% else %}status-needs-info{% endif %}">
+              {{ p.status }}
+            </span>
+          </td>
+
+          <td>
+            <form method="post" action="{{ url_for('update_project_status', project_id=p.id) }}" style="display:inline-flex; gap:4px;">
+              <select name="status" class="form-input form-input-sm" style="width:110px;">
+                <option value="Active" {% if p.status == 'Active' %}selected{% endif %}>Active</option>
+                <option value="Inactive" {% if p.status == 'Inactive' %}selected{% endif %}>Inactive</option>
+                <option value="Archived" {% if p.status == 'Archived' %}selected{% endif %}>Archived</option>
+              </select>
+              <button type="submit" class="btn btn-sm btn-secondary">Set</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- Section 3: Dual Grid: System Approval Thresholds & Historical Ingestion -->
+<section class="admin-two-col-grid" style="margin-top: 30px;">
+  <!-- System Policy Thresholds Form -->
+  <div class="panel-box">
+    <div class="card-eyebrow">COMPANY POLICY THRESHOLDS</div>
+    <h3 class="panel-title">Multi-Tier Approval Escalation & Editing Period</h3>
+    <p class="small-sub">Claims exceeding these thresholds are dynamically routed to Accounts, Managers, or VPs.</p>
+
+    <form method="post" action="{{ url_for('update_policy_thresholds') }}" style="margin-top: 18px;">
+      <div class="form-group" style="margin-bottom: 12px;">
+        <label>System Default Auto-Approval Cap (INR) *</label>
+        <input type="number" step="50" name="auto_approval_cap" value="{{ system_settings.auto_approval_cap }}" required class="form-input font-mono">
+        <small class="text-muted">Applied when claims do not specify an active project code.</small>
+      </div>
+
+      <div class="input-row-2" style="margin-bottom: 12px;">
+        <div class="form-group">
+          <label>Manager Sign-off Threshold (INR) *</label>
+          <input type="number" step="100" name="manager_approval_threshold" value="{{ system_settings.manager_approval_threshold }}" required class="form-input font-mono">
+        </div>
+        <div class="form-group">
+          <label>VP / Director Sign-off (INR) *</label>
+          <input type="number" step="100" name="vp_approval_threshold" value="{{ system_settings.vp_approval_threshold }}" required class="form-input font-mono">
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 16px;">
+        <label>Employee Claim Editing Window (Hours) *</label>
+        <input type="number" step="1" name="editing_window_hours" value="{{ system_settings.editing_window_hours }}" required class="form-input font-mono">
+        <small class="text-muted">Allowed grace period for employees to edit descriptions or attach missing documents.</small>
+      </div>
+
+      <button type="submit" class="btn btn-primary">
+        💾 Save System Thresholds & Editing Window
+      </button>
+    </form>
+  </div>
+
+  <!-- Historical Data Ingestion & Exports -->
+  <div class="panel-box">
+    <div class="card-eyebrow">HISTORICAL DATA MIGRATION & AUDIT EXPORTS</div>
+    <h3 class="panel-title">Ingest Legacy Datasets</h3>
+    <p class="small-sub">Upload CSV datasets with varied column conventions. Automatic identity resolution ensures no duplicate employee accounts or claims are created.</p>
+
+    <form method="post" action="{{ url_for('import_historical_csv') }}" enctype="multipart/form-data" style="margin-top: 18px;">
+      <div class="form-group" style="margin-bottom: 14px;">
+        <label>Select Historical Expense CSV *</label>
+        <input type="file" name="csv_file" accept=".csv" required class="form-input">
+        <small class="text-muted">Recognizes standard & irregular variations of Employee, Merchant, Amount, Date, Category, etc.</small>
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width: 100%;">
+        ⚡ Ingest Historical CSV & Reconcile Profiles →
+      </button>
+    </form>
+
+    <div class="export-download-box" style="margin-top: 24px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,0.08);">
+      <div style="font-weight: 700; color: #38bdf8; margin-bottom: 6px;">📦 Standardized Export Packages</div>
+      <p style="font-size: 0.82rem; color: #94a3b8; margin-bottom: 12px;">
+        Generate standardized audit archives containing all 8 normalized financial datasets (employees, expenses, receipts, line items, policy evaluations, duplicate candidates, risk flags, summary).
+      </p>
+      <div style="display:flex; gap:10px;">
+        <a href="{{ url_for('export_standardized_zip') }}" class="btn btn-sm btn-accent" style="flex:1; text-align:center;">
+          ⬇ Download 8-File ZIP
+        </a>
+        <a href="{{ url_for('export_csv') }}" class="btn btn-sm btn-secondary" style="flex:1; text-align:center;">
+          ⬇ Raw Expenses CSV
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 4: Company Offices Governance & Add Office Form -->
+<section class="admin-two-col-grid" style="margin-top: 30px;">
+  <!-- Offices List -->
+  <div class="panel-box">
+    <div class="block-header-row">
+      <div>
+        <span class="card-eyebrow">COMPANY BRANCHES & HOME BASES</span>
+        <h3 class="panel-title">Registered Offices ({{ offices|length }})</h3>
+      </div>
+    </div>
+
+    <div class="offices-cards-stack">
+      {% for o in offices %}
+      <div class="office-card-item">
+        <div class="office-card-main">
+          <div class="office-title-row">
+            <strong>{{ o.name }}</strong>
+            {% if o.is_headquarters %}
+              <span class="hq-badge">HEADQUARTERS</span>
+            {% endif %}
+          </div>
+          <div class="office-address">{{ o.address }} · {{ o.city }}, {{ o.state }}</div>
+          <div class="office-cap-note">Local meal limit: ₹{{ "{:,.0f}".format(o.local_meal_cap) }}</div>
+        </div>
+        <div class="office-emp-count">
+          <span class="emp-count-num">{{ o.employee_count or 0 }}</span>
+          <small>Employees</small>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Add New Office Form -->
+  <div class="panel-box">
+    <div class="card-eyebrow">EXPAND FOOTPRINT</div>
+    <h3 class="panel-title">Register New Office Branch</h3>
+    <p class="small-sub">Adding an office enables the policy engine to recognize local claims in this city.</p>
+
+    <form method="post" action="{{ url_for('add_office') }}" class="add-office-form" style="margin-top: 18px;">
+      <div class="form-group">
+        <label>Office Name *</label>
+        <input type="text" name="name" required placeholder="e.g. Chennai Development Hub" class="form-input">
+      </div>
+
+      <div class="input-row-2">
+        <div class="form-group">
+          <label>City *</label>
+          <input type="text" name="city" required placeholder="e.g. Chennai" class="form-input">
+        </div>
+        <div class="form-group">
+          <label>State *</label>
+          <input type="text" name="state" required placeholder="e.g. Tamil Nadu" class="form-input">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Full Address</label>
+        <input type="text" name="address" placeholder="e.g. OMR IT Corridor, Taramani, Chennai" class="form-input">
+      </div>
+
+      <div class="form-group">
+        <label>Local Meal Cap (INR)</label>
+        <input type="number" name="local_meal_cap" value="1200" required class="form-input font-mono">
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-submit-claim">
+        + Register Office Branch
+      </button>
+    </form>
+  </div>
+</section>
+
+<!-- Modal: Add New Staff Profile -->
+<div id="addUserModal" class="modal-backdrop" style="display: none;">
+  <div class="modal-dialog">
+    <div class="modal-head">
+      <h3>Create Staff Account</h3>
+      <button class="modal-close-btn" onclick="toggleAddUserModal()">✕</button>
+    </div>
+    <form method="post" action="{{ url_for('add_user') }}">
+      <div class="modal-body">
+        <div class="form-group" style="margin-bottom:12px;">
+          <label>Full Name *</label>
+          <input type="text" name="name" required placeholder="e.g. Sunita Rao" class="form-input">
+        </div>
+
+        <div class="form-group" style="margin-bottom:12px;">
+          <label>Official Email Address *</label>
+          <input type="email" name="email" required placeholder="e.g. sunita.rao@company.com" class="form-input">
+        </div>
+
+        <div class="input-row-2" style="margin-bottom:12px;">
+          <div class="form-group">
+            <label>User Role *</label>
+            <select name="role" class="form-input">
+              <option value="employee">Employee</option>
+              <option value="accounts">Accounts Reviewer</option>
+              <option value="admin">Administrator</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Mapped Home Office *</label>
+            <select name="office_id" class="form-input">
+              {% for o in offices %}
+                <option value="{{ o.id }}">{{ o.name }} ({{ o.city }})</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="input-row-2" style="margin-bottom:12px;">
+          <div class="form-group">
+            <label>Department</label>
+            <input type="text" name="department" placeholder="e.g. Engineering, Sales, Finance" class="form-input">
+          </div>
+          <div class="form-group">
+            <label>Phone Number</label>
+            <input type="text" name="phone" placeholder="+91 98765 43210" class="form-input font-mono">
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px;">
+          <label>Initial Password</label>
+          <input type="text" name="password" value="welcome123" class="form-input font-mono">
+        </div>
+
+        <div class="modal-action-row">
+          <button type="button" class="btn btn-secondary" onclick="toggleAddUserModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">+ Create Account</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Register Project -->
+<div id="addProjectModal" class="modal-backdrop" style="display: none;">
+  <div class="modal-dialog">
+    <div class="modal-head">
+      <h3>Register Enterprise Project & Cap</h3>
+      <button class="modal-close-btn" onclick="toggleAddProjectModal()">✕</button>
+    </div>
+    <form method="post" action="{{ url_for('add_project') }}">
+      <div class="modal-body">
+        <div class="input-row-2" style="margin-bottom:12px;">
+          <div class="form-group">
+            <label>Unique Project Code *</label>
+            <input type="text" name="code" required placeholder="e.g. PRJ-ACME-2026" class="form-input font-mono">
+          </div>
+          <div class="form-group">
+            <label>Project Name *</label>
+            <input type="text" name="name" required placeholder="e.g. Acme Digital Transformation" class="form-input">
+          </div>
+        </div>
+
+        <div class="input-row-2" style="margin-bottom:12px;">
+          <div class="form-group">
+            <label>Per-Person Auto-Approval Cap (INR) *</label>
+            <input type="number" step="100" name="auto_approval_cap" value="5000" required class="form-input font-mono">
+          </div>
+          <div class="form-group">
+            <label>Total Project Budget (INR) *</label>
+            <input type="number" step="1000" name="budget" value="250000" required class="form-input font-mono">
+          </div>
+        </div>
+
+        <div class="input-row-2" style="margin-bottom:12px;">
+          <div class="form-group">
+            <label>Client Name</label>
+            <input type="text" name="client_name" placeholder="e.g. Acme Corp Inc." class="form-input">
+          </div>
+          <div class="form-group">
+            <label>Project Manager</label>
+            <input type="text" name="manager_name" placeholder="e.g. Vikram Malhotra" class="form-input">
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px;">
+          <label>Project Description</label>
+          <textarea name="description" rows="2" placeholder="Scope and billing guidelines..." class="form-input"></textarea>
+        </div>
+
+        <div class="modal-action-row">
+          <button type="button" class="btn btn-secondary" onclick="toggleAddProjectModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">+ Register Project</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function toggleAddUserModal() {
+  const m = document.getElementById('addUserModal');
+  m.style.display = m.style.display === 'none' ? 'flex' : 'none';
+}
+
+function toggleAddProjectModal() {
+  const m = document.getElementById('addProjectModal');
+  m.style.display = m.style.display === 'none' ? 'flex' : 'none';
+}
+</script>
+{% endblock %}

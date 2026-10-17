@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+{% block title %}Policy Rules & Audit Rulebook · Receipt Graveyard{% endblock %}
+
+{% block content %}
+<div class="policy-page-head">
+  <div class="eyebrow-chip">CONFIGURATION & RULEBOOK · POLICY V2.4</div>
+  <h1 class="page-title">Rules in the <span>open.</span></h1>
+  <p class="page-intro">
+    Our AI Auditor relies on deterministic, layered policy rules. Below are the active category caps, city per-diems, non-reimbursable catalog, and conditional thresholds governing reimbursement decisions.
+  </p>
+</div>
+
+<!-- Interactive Policy Calculator Simulator -->
+<section class="policy-calc-panel">
+  <div class="panel-head-row">
+    <div>
+      <span class="card-eyebrow">INTERACTIVE POLICY SIMULATOR</span>
+      <h3 class="panel-title">Test a Claim Against Policy Rules</h3>
+    </div>
+  </div>
+
+  <div class="calc-form-grid">
+    <div class="form-group">
+      <label>Category</label>
+      <select id="simCategory" class="form-input">
+        <option value="Meals">Meals</option>
+        <option value="Travel">Travel (Flights/Cabs)</option>
+        <option value="Accommodation">Accommodation</option>
+        <option value="Office Supplies">Office Supplies</option>
+        <option value="Entertainment">Entertainment</option>
+        <option value="Other">Other</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>City Location</label>
+      <select id="simCity" class="form-input">
+        {% for c, lim in policy.city_daily_limits.items() %}
+          <option value="{{ c }}">{{ c }} (Daily Cap: ₹{{ "{:,.0f}".format(lim) }})</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Amount (INR)</label>
+      <input type="number" id="simAmount" value="1800" class="form-input font-mono">
+    </div>
+
+    <div class="form-group">
+      <label>Context</label>
+      <select id="simTrip" class="form-input">
+        <option value="1">✈️ Out-of-town Business Trip</option>
+        <option value="0">🏠 Local Home Office</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Attendees</label>
+      <input type="number" id="simAttendees" value="1" min="1" class="form-input">
+    </div>
+  </div>
+
+  <div class="sim-result-box" id="simResultBox">
+    <div class="sim-verdict-row">
+      <div>
+        <span class="sim-label">ESTIMATED REIMBURSABLE:</span>
+        <strong id="simReimbursable" class="color-green font-mono">₹1,800.00</strong>
+      </div>
+      <div>
+        <span class="sim-label">APPROVAL TIER:</span>
+        <span id="simApprovalTier" class="status-pill status-approved">Auto-Eligible</span>
+      </div>
+    </div>
+    <div class="sim-explanation" id="simExplanation">
+      Calculation notes will appear here based on input parameters.
+    </div>
+  </div>
+</section>
+
+<!-- Policy Grid Breakdown -->
+<div class="policy-sections-grid">
+  <!-- Category Caps -->
+  <div class="panel-box">
+    <div class="card-eyebrow">01 / CATEGORY CAPS (PER RECEIPT)</div>
+    <h3 class="panel-title">Reimbursement Ceilings</h3>
+    <div class="policy-rows-stack">
+      <div class="policy-row">
+        <div>
+          <strong>Meals (Business Trip)</strong>
+          <small class="table-sub">Higher travel per-diem allowance</small>
+        </div>
+        <span class="font-mono policy-val">₹{{ "{:,.0f}".format(policy.category_caps.Meals_Trip) }}</span>
+      </div>
+      <div class="policy-row">
+        <div>
+          <strong>Meals (Local Office)</strong>
+          <small class="table-sub">Requires client name or overtime justification</small>
+        </div>
+        <span class="font-mono policy-val">₹{{ "{:,.0f}".format(policy.category_caps.Meals_Local) }}</span>
+      </div>
+      <div class="policy-row">
+        <div>
+          <strong>Travel (Flights, Intercity Trains, Cabs)</strong>
+          <small class="table-sub">Per travel leg / flight</small>
+        </div>
+        <span class="font-mono policy-val">₹{{ "{:,.0f}".format(policy.category_caps.Travel) }}</span>
+      </div>
+      <div class="policy-row">
+        <div>
+          <strong>Accommodation (Hotel Stay)</strong>
+          <small class="table-sub">Per night cap</small>
+        </div>
+        <span class="font-mono policy-val">₹{{ "{:,.0f}".format(policy.category_caps.Accommodation) }}</span>
+      </div>
+      <div class="policy-row">
+        <div>
+          <strong>Office Supplies</strong>
+          <small class="table-sub">Hardware, adapters, stationery</small>
+        </div>
+        <span class="font-mono policy-val">₹{{ "{:,.0f}".format(policy.category_caps.get('Office Supplies', 3000)) }}</span>
+      </div>
+      <div class="policy-row">
+        <div>
+          <strong>Entertainment</strong>
+          <small class="table-sub">Disallowed under standard policy</small>
+        </div>
+        <span class="font-mono policy-val color-red">₹0 (Non-reimbursable)</span>
+      </div>
+      <div class="policy-row">
+        <div>
+          <strong>Incidentals & Other</strong>
+        </div>
+        <span class="font-mono policy-val">₹{{ "{:,.0f}".format(policy.category_caps.Other) }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- City Daily Per-Diems -->
+  <div class="panel-box">
+    <div class="card-eyebrow">02 / CITY DAILY LIMITS (PER-DIEM)</div>
+    <h3 class="panel-title">Cumulative Daily Spend Caps</h3>
+    <p class="small-sub">Applies to the sum of all meal and local transit receipts incurred on the same day in that city.</p>
+    <div class="policy-rows-stack">
+      {% for city, cap in policy.city_daily_limits.items() %}
+      <div class="policy-row">
+        <strong>{{ city }}</strong>
+        <span class="font-mono policy-val">₹{{ "{:,.0f}".format(cap) }} / day</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Conditional Rules & Approvals -->
+  <div class="panel-box">
+    <div class="card-eyebrow">03 / CONDITIONAL RULES & ESCALATION</div>
+    <h3 class="panel-title">Compliance Thresholds</h3>
+    <div class="policy-rows-stack">
+      <div class="policy-row">
+        <span>Meal Client Name Requirement</span>
+        <strong class="font-mono">Above ₹{{ policy.meal_rules.client_name_required_above }}</strong>
+      </div>
+      <div class="policy-row">
+        <span>Meal Attendee Count Requirement</span>
+        <strong class="font-mono">Above ₹{{ policy.meal_rules.attendees_required_above }}</strong>
+      </div>
+      <div class="policy-row">
+        <span>Per-Attendee Max Meal Allowance</span>
+        <strong class="font-mono">₹{{ policy.meal_rules.max_per_attendee }} / person</strong>
+      </div>
+      <div class="policy-row">
+        <span>Manager Approval Escalation</span>
+        <strong class="font-mono">₹{{ "{:,.0f}".format(policy.approval_thresholds.manager_approval) }}+</strong>
+      </div>
+      <div class="policy-row">
+        <span>VP / Director Executive Escalation</span>
+        <strong class="font-mono">₹{{ "{:,.0f}".format(policy.approval_thresholds.vp_approval) }}+</strong>
+      </div>
+      <div class="policy-row">
+        <span>Maximum Submission Window</span>
+        <strong class="font-mono">{{ policy.max_submission_age_days }} Days from receipt date</strong>
+      </div>
+    </div>
+  </div>
+
+  <!-- Non-Reimbursable Catalog -->
+  <div class="panel-box">
+    <div class="card-eyebrow">04 / NON-REIMBURSABLE PROHIBITIONS</div>
+    <h3 class="panel-title">Itemized Deduction Catalog</h3>
+    <p class="small-sub">When detected on itemized restaurant or hotel bills, these items are automatically deducted from reimbursement.</p>
+
+    {% for cat_name, keywords in policy.non_reimbursable_catalog.items() %}
+    <div class="catalog-group">
+      <strong>{{ cat_name }}</strong>
+      <div class="chip-cloud">
+        {% for kw in keywords %}
+          <span class="keyword-chip">{{ kw }}</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Live Policy Simulator Calculator
+function calculateSimulation() {
+  const cat = document.getElementById('simCategory').value;
+  const city = document.getElementById('simCity').value;
+  const amount = parseFloat(document.getElementById('simAmount').value || '0');
+  const isTrip = document.getElementById('simTrip').value === '1';
+  const attendees = parseInt(document.getElementById('simAttendees').value || '1', 10);
+
+  let cap = 1500;
+  if (cat === 'Meals') {
+    cap = isTrip ? 2200 : 1200;
+  } else if (cat === 'Travel') cap = 9000;
+  else if (cat === 'Accommodation') cap = 7500;
+  else if (cat === 'Office Supplies') cap = 3000;
+  else if (cat === 'Entertainment') cap = 0;
+
+  let reimb = Math.min(amount, cap);
+  let notes = [];
+
+  if (amount > cap) {
+    notes.push(`Capped to ₹${cap.toLocaleString()} by the ${cat} category limit.`);
+  } else {
+    notes.push(`Within allowable ${cat} category cap.`);
+  }
+
+  if (cat === 'Meals') {
+    if (!isTrip) notes.push("Local office meals require client justification or overtime confirmation.");
+    if (amount > 1200) notes.push("Requires client/project name.");
+    if (amount > 1000) notes.push("Requires attendee count.");
+    if (attendees > 0 && (amount / attendees) > 1800) {
+      notes.push(`Per-attendee cost (₹${(amount/attendees).toFixed(0)}) exceeds ₹1,800/person limit.`);
+    }
+  }
+
+  let approvalTier = 'Auto-Eligible';
+  if (amount >= 25000) approvalTier = 'VP / Director Approval';
+  else if (amount >= 10000) approvalTier = 'Manager Approval';
+
+  document.getElementById('simReimbursable').textContent = `₹${reimb.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+  document.getElementById('simApprovalTier').textContent = approvalTier;
+  document.getElementById('simExplanation').textContent = notes.join(' ');
+}
+
+['simCategory', 'simCity', 'simAmount', 'simTrip', 'simAttendees'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener('input', calculateSimulation);
+    el.addEventListener('change', calculateSimulation);
+  }
+});
+calculateSimulation();
+</script>
+{% endblock %}

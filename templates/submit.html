@@ -1,0 +1,795 @@
+{% extends "base.html" %}
+{% block title %}Submit & Dual Evidence Intake · Receipt Graveyard{% endblock %}
+
+{% block extra_head %}
+<!-- Tesseract.js CDN for instantaneous client-side WebAssembly OCR -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="submit-page-head">
+  <div class="eyebrow-chip">DUAL EVIDENCE INTAKE · BILL PHOTO + PAYMENT SCREENSHOT</div>
+  <h1 class="page-title">Submit receipt. <span>Dual-proof verification.</span></h1>
+  <p class="page-intro">
+    Upload or snap live photos of both your <strong>Itemized Bill</strong> and your <strong>Payment Screenshot</strong> (Google Pay, PhonePe, Paytm, or Card slip). Our AI cross-matches the amounts, extracts line items, and reconciles transactions against your assigned office policy.
+  </p>
+</div>
+
+<!-- Tabs: Single Upload vs Batch Ingestion -->
+<div class="upload-mode-tabs">
+  <button class="tab-btn active" id="singleTabBtn" onclick="switchTab('single')">Single Expense (Dual Evidence + Camera)</button>
+  <button class="tab-btn" id="batchTabBtn" onclick="switchTab('batch')">⚡ Batch Month Ingestion (Multi-Receipts)</button>
+</div>
+
+<!-- SINGLE SUBMISSION VIEW -->
+<div id="singleUploadView" class="form-grid-layout">
+  <form class="audit-form-card" method="post" enctype="multipart/form-data" id="expenseForm">
+    
+    <!-- Section 1: Dual Evidence Capture (Bill Photo + Payment Screenshot) -->
+    <div class="form-block-head">
+      <div class="block-num">01</div>
+      <div>
+        <h3>Dual Evidence: Bill Photo & Payment Screenshot</h3>
+        <p>Attach both itemized merchant proof and digital payment proof for 100% verified reimbursement.</p>
+      </div>
+    </div>
+
+    <!-- Dual Dropzone Grid -->
+    <div class="dual-drop-grid">
+      <!-- Evidence A: Itemized Bill / Invoice -->
+      <div class="evidence-box">
+        <div class="evidence-box-head">
+          <span class="evidence-badge">PROOF 1: ITEMIZED BILL *</span>
+          <button type="button" class="btn-camera" onclick="openCameraModal('bill')">📸 Use Camera</button>
+        </div>
+        <div class="drop-zone-container compact-drop" id="billDropZone">
+          <div class="drop-zone-content">
+            <div class="drop-icon-sm">🧾</div>
+            <div class="drop-text-primary">Itemized Bill / Invoice</div>
+            <div class="drop-text-sub">Drop PNG, JPG or PDF · OCR Active</div>
+            <input type="file" id="billFileInput" name="receipt" accept=".png,.jpg,.jpeg,.webp,.pdf" class="file-hidden-input">
+          </div>
+        </div>
+        <div id="billPreviewWrap" class="mini-preview-wrap" style="display: none;">
+          <img id="billImgPreview" class="mini-preview-img" alt="Bill preview">
+          <span id="billFileName" class="mini-filename">bill.jpg</span>
+        </div>
+        <input type="hidden" name="bill_camera_data" id="billCameraData">
+      </div>
+
+      <!-- Evidence B: Payment Screenshot (UPI / Card Slip) -->
+      <div class="evidence-box">
+        <div class="evidence-box-head">
+          <span class="evidence-badge">PROOF 2: PAYMENT SCREENSHOT</span>
+          <button type="button" class="btn-camera" onclick="openCameraModal('payment')">📸 Use Camera</button>
+        </div>
+        <div class="drop-zone-container compact-drop" id="payDropZone">
+          <div class="drop-zone-content">
+            <div class="drop-icon-sm">📱</div>
+            <div class="drop-text-primary">Payment Screenshot</div>
+            <div class="drop-text-sub">Google Pay, PhonePe, Paytm, or Card Slip</div>
+            <input type="file" id="payFileInput" name="payment_screenshot" accept=".png,.jpg,.jpeg,.webp" class="file-hidden-input">
+          </div>
+        </div>
+        <div id="payPreviewWrap" class="mini-preview-wrap" style="display: none;">
+          <img id="payImgPreview" class="mini-preview-img" alt="Payment preview">
+          <span id="payFileName" class="mini-filename">payment.jpg</span>
+        </div>
+        <input type="hidden" name="payment_camera_data" id="payCameraData">
+      </div>
+    </div>
+
+    <!-- Live OCR Progress Bar -->
+    <div id="ocrProgressCard" class="ocr-progress-card" style="display: none; margin-top: 15px;">
+      <div class="ocr-progress-head">
+        <span class="ocr-spin">⚙</span>
+        <span id="ocrStatusText">Scanning Bill & Payment Proof with WebAssembly OCR...</span>
+        <span id="ocrPercentText" class="ocr-percent">0%</span>
+      </div>
+      <div class="ocr-bar-track">
+        <div id="ocrBarFill" class="ocr-bar-fill" style="width: 0%;"></div>
+      </div>
+    </div>
+
+    <!-- Hidden Raw Text fields -->
+    <textarea name="ocr_raw_text" id="ocrRawText" style="display: none;"></textarea>
+    <textarea name="payment_raw_text" id="payRawText" style="display: none;"></textarea>
+
+    <!-- Section 2: Employee Ownership & Office Mapping Context -->
+    <div class="form-block-head" style="margin-top: 30px;">
+      <div class="block-num">02</div>
+      <div>
+        <h3>Employee & Home Office Context</h3>
+        <p>The auditor checks your mapped home office to evaluate travel per-diems vs local meal rules.</p>
+      </div>
+    </div>
+
+    <div class="input-row-2">
+      <div class="form-group">
+        <label>Employee Identity *</label>
+        {% if current_user.role == 'employee' %}
+          <div class="locked-identity-card">
+            <div class="locked-avatar">{{ current_user.name[:2]|upper }}</div>
+            <div class="locked-meta">
+              <div class="locked-name"><strong>{{ current_user.name }}</strong> <span class="badge-role-emp">EMPLOYEE</span></div>
+              <div class="locked-sub">{{ current_user.department or 'General Operations' }} · {{ current_user.email }}</div>
+            </div>
+            <input type="hidden" name="employee" id="fieldEmployee" value="{{ current_user.name }}">
+          </div>
+          <div class="field-hint-box" id="officeMappingHint" style="margin-top: 8px;">
+            📍 Mapped Home Office: <strong>{{ current_user.office_name or 'Mumbai HQ' }} ({{ current_user.office_city or 'Mumbai' }})</strong> · Local Meal Cap: ₹{{ "{:,.0f}".format(current_user.local_meal_cap) }}
+          </div>
+        {% else %}
+          <select name="employee" id="fieldEmployee" required class="form-input" onchange="updateEmployeeOfficeHint()">
+            {% for u in all_users %}
+              {% if u.role == 'employee' or current_user.role in ('admin', 'accounts') %}
+                <option value="{{ u.name }}" data-office="{{ u.office_name }}" data-city="{{ u.office_city }}" data-cap="{{ u.local_meal_cap }}" {% if current_user and current_user.name == u.name %}selected{% endif %}>
+                  {{ u.name }} ({{ u.department or u.role|capitalize }}) · {{ u.office_city or 'HQ' }}
+                </option>
+              {% endif %}
+            {% endfor %}
+          </select>
+          <div class="field-hint-box" id="officeMappingHint">
+            📍 Mapped Home Office: <strong>{{ current_user.office_name or 'Mumbai HQ' }} ({{ current_user.office_city or 'Mumbai' }})</strong>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Section 2: Business Trip & Project Assignment Workflow -->
+    <div class="form-block-head" style="margin-top: 25px;">
+      <div class="block-num">02</div>
+      <div>
+        <h3>Trip & Project Assignment</h3>
+        <p>Specify travel context and whether this expense is billable against an authorized enterprise project code.</p>
+      </div>
+    </div>
+
+    <div class="trip-flow-card" style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 20px;">
+      <!-- Step 1: Was this a business trip? -->
+      <div class="flow-step">
+        <label class="custom-checkbox-label">
+          <input type="checkbox" name="is_trip" id="isTripCheckbox" value="1" onchange="handleTripChange()">
+          <span class="checkmark"></span>
+          <div class="checkbox-text">
+            <strong>✈️ Was this an official out-of-town business trip?</strong>
+            <small>Travel meals receive destination city per-diem limits (up to ₹2,200) instead of home office local meal cap (₹1,200).</small>
+          </div>
+        </label>
+      </div>
+
+      <!-- Step 2: If yes, was it for some project? -->
+      <div id="projectQuestionBlock" style="display: none; margin-top: 14px; padding-left: 32px; border-left: 2px solid var(--accent);">
+        <label class="custom-checkbox-label">
+          <input type="checkbox" name="is_project" id="isProjectCheckbox" value="1" checked onchange="handleProjectChange()">
+          <span class="checkmark"></span>
+          <div class="checkbox-text">
+            <strong>💼 Was this trip for an enterprise project / client code?</strong>
+            <small>If unchecked, this expense is allocated to General Travel Overhead.</small>
+          </div>
+        </label>
+      </div>
+
+      <!-- Step 3: If yes, ask project number / code -->
+      <div id="projectSelectBlock" style="margin-top: 14px; padding-left: 32px; border-left: 2px solid var(--emerald);">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label>Enterprise Project Number / Code *</label>
+          <select name="project_code" id="fieldProjectCode" class="form-input font-mono" onchange="updateProjectCapHint()">
+            {% if all_projects %}
+              {% for prj in all_projects %}
+                {% if prj.status|lower == 'active' %}
+                  <option value="{{ prj.code or prj.project_code }}" data-cap="{{ prj.auto_approval_cap or prj.reimbursement_cap or 2000 }}" data-name="{{ prj.name or prj.project_name }}" {% if loop.first %}selected{% endif %}>
+                    {{ prj.code or prj.project_code }} · {{ prj.name or prj.project_name }} (Auto-Approval Cap: ₹{{ "{:,.0f}".format(prj.auto_approval_cap or prj.reimbursement_cap or 2000) }})
+                  </option>
+                {% endif %}
+              {% endfor %}
+            {% else %}
+              <option value="PRJ-2026-Q4" data-cap="5000" data-name="General Corporate Projects">PRJ-2026-Q4 · General Corporate Projects (Cap: ₹5,000)</option>
+            {% endif %}
+          </select>
+          <div class="field-hint-box" id="projectCapHint" style="margin-top: 6px; font-size: 0.8rem;">
+            🛡️ Per-Person Auto-Approval Cap: <strong id="projectCapDisplay" class="font-mono">₹5,000</strong>. Compliant claims ≤ Cap are auto-approved!
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 3: Comprehensive Expense Details -->
+    <div class="form-block-head" style="margin-top: 30px;">
+      <div class="block-num">03</div>
+      <div>
+        <h3>Comprehensive Expense Details</h3>
+        <p>Fields auto-populated by live OCR. Review and enter billing details.</p>
+      </div>
+    </div>
+
+    <div class="input-row-3">
+      <div class="form-group">
+        <label>Expense Date * <small class="text-muted">(Future dates restricted)</small></label>
+        <input type="date" name="expense_date" id="fieldDate" required class="form-input" max="{{ today or '' }}">
+      </div>
+
+      <div class="form-group">
+        <label>Merchant / Vendor *</label>
+        <input type="text" name="merchant" id="fieldMerchant" required placeholder="e.g. Theobroma, IndiGo, Toit" class="form-input">
+      </div>
+
+      <div class="form-group">
+        <label>Category *</label>
+        <select name="category" id="fieldCategory" class="form-input">
+          <option value="Meals">Meals</option>
+          <option value="Travel">Travel (Flights, Cabs, Trains)</option>
+          <option value="Accommodation">Accommodation (Hotels)</option>
+          <option value="Office Supplies">Office Supplies</option>
+          <option value="Entertainment">Entertainment</option>
+          <option value="Other">Other / Incidentals</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="input-row-3">
+      <div class="form-group">
+        <label>Expense City / Location * <small class="text-muted">(Auto-selects currency)</small></label>
+        <select name="city" id="fieldCity" class="form-input" onchange="updateCurrencyByCity()">
+          {% for city_name, limit in policy.city_daily_limits.items() %}
+            <option value="{{ city_name }}" {% if city_name == current_user.office_city %}selected{% endif %}>
+              {{ city_name }} (Daily Cap: ₹{{ "{:,.0f}".format(limit) }})
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Claimed Amount (Receipt Currency) *</label>
+        <input type="number" step="0.01" min="0" name="amount" id="fieldAmount" required placeholder="0.00" class="form-input font-mono">
+      </div>
+
+      <div class="form-group">
+        <label>Currency <small class="text-muted">(Auto-selected by city)</small></label>
+        <select name="currency" id="fieldCurrency" class="form-input font-mono">
+          {% for curr, rate in policy.currency_rates_to_inr.items() %}
+            <option value="{{ curr }}" {% if curr == 'INR' %}selected{% endif %}>
+              {{ curr }} (Rate: {{ rate }} INR)
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <!-- Section 4: Mandatory UPI Integration -->
+    <div class="form-block-head" style="margin-top: 30px;">
+      <div class="block-num">04</div>
+      <div>
+        <h3>Payment Proof & UPI Reconciliation</h3>
+        <p>UPI is the company-mandated payment method. Verified against your screenshot.</p>
+      </div>
+    </div>
+
+    <div class="input-row-3">
+      <div class="form-group">
+        <label>Payment Method *</label>
+        <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.2rem;">⚡</span>
+          <div>
+            <div style="font-weight: 700; color: #10b981;">UPI (Unified Payments Interface)</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">Mandatory Mode: Google Pay, PhonePe, Paytm, CRED, BHIM</div>
+          </div>
+        </div>
+        <input type="hidden" name="payment_method" id="fieldPayMethod" value="UPI">
+      </div>
+
+      <div class="form-group" id="upiAppWrapper">
+        <label>UPI Application</label>
+        <select name="upi_app" id="fieldUpiApp" class="form-input">
+          <option value="Google Pay">Google Pay (GPay)</option>
+          <option value="PhonePe">PhonePe</option>
+          <option value="Paytm">Paytm</option>
+          <option value="CRED">CRED</option>
+          <option value="BHIM UPI">BHIM UPI</option>
+          <option value="Other UPI">Other UPI App</option>
+        </select>
+      </div>
+
+      <div class="form-group" id="upiVpaWrapper">
+        <label>Merchant / Payee UPI ID (VPA) <small class="text-muted">(Optional)</small></label>
+        <input type="text" name="upi_vpa" id="fieldUpiVpa" placeholder="e.g. theobroma@icici or merchant@upi" class="form-input font-mono">
+      </div>
+    </div>
+
+    <div class="input-row-1" style="margin-top: 10px;">
+      <div class="form-group">
+        <label>Transaction Reference / 12-Digit UTR <small class="text-muted">(From Payment Proof)</small></label>
+        <input type="text" name="transaction_ref" id="fieldTxnRef" placeholder="e.g. 428910283921" class="form-input font-mono">
+        <div class="field-hint-box" style="margin-top: 4px; font-size: 0.78rem;">
+          💡 12-digit UPI UTR is auto-extracted from Google Pay/PhonePe screenshots to prevent double reimbursement.
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 5: Client & Attendance Governance -->
+    <div class="form-block-head" style="margin-top: 30px;">
+      <div class="block-num">05</div>
+      <div>
+        <h3>Client & Attendance Governance</h3>
+        <p>Policy checks mandate client name for meals &gt; ₹1,200 and attendee count for meals &gt; ₹1,000.</p>
+      </div>
+    </div>
+
+    <div class="input-row-2">
+      <div class="form-group">
+        <label>Client Name / Organization <small class="text-muted">(Required for meals > ₹1,200)</small></label>
+        <input type="text" name="client_name" id="fieldClient" placeholder="e.g. Acme Corp Tech Review" class="form-input">
+      </div>
+
+      <div class="form-group">
+        <label>Attendee Count <small class="text-muted">(Required for meals > ₹1,000)</small></label>
+        <input type="number" min="0" name="attendees" id="fieldAttendees" placeholder="0" class="form-input">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Attendee Names / Participants <small class="text-muted">(Comma separated)</small></label>
+      <input type="text" name="attendee_names" id="fieldAttendeeNames" placeholder="e.g. Aarav Mehta, John Doe, Priya Sen" class="form-input">
+    </div>
+
+    <div class="form-group">
+      <label>Business Purpose / Itemized Notes</label>
+      <textarea name="description" id="fieldDesc" rows="3" placeholder="Context, business purpose, or itemized bill notes..." class="form-input"></textarea>
+    </div>
+
+    <div class="submit-action-bar">
+      <button type="submit" name="save_draft" value="1" class="btn btn-secondary btn-draft-action">
+        💾 Save as Draft
+      </button>
+      <button type="submit" name="save_draft" value="0" class="btn btn-primary btn-submit-claim">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+        Run Autonomous AI Audit & Submit Claim →
+      </button>
+    </div>
+  </form>
+
+  <!-- Side Guidance Panel -->
+  <aside class="audit-side-panel">
+    <div class="policy-quick-card">
+      <div class="card-eyebrow">DUAL EVIDENCE RECONCILIATION</div>
+      <h3>Why Two Proofs?</h3>
+      <p class="small-sub" style="margin-bottom: 14px;">
+        Finance requires both the <strong>Itemized Bill</strong> (to audit line items, alcohol, taxes) and the <strong>Payment Screenshot</strong> (to prove actual money was paid via UPI/Card).
+      </p>
+      <ul class="rule-checklist">
+        <li><span class="icon-check">✓</span> <strong>Cross-Amount Matching:</strong> Auto-verifies that UPI paid amount equals bill grand total.</li>
+        <li><span class="icon-check">✓</span> <strong>Recycled Proof Protection:</strong> Flags duplicate UPI UTR / Transaction reference numbers.</li>
+        <li><span class="icon-check">✓</span> <strong>Faded Ink Booster:</strong> Contrast filters for faint thermal printouts.</li>
+        <li><span class="icon-check">✓</span> <strong>Auto-Approval Engine:</strong> Claims under project cap with zero risk flags bypass manual review.</li>
+      </ul>
+    </div>
+
+    <div class="sample-demo-card">
+      <div class="card-eyebrow">ACTIVE USER & OFFICE</div>
+      <h4>{{ current_user.name }}</h4>
+      <p class="small-sub">Role: <strong>{{ current_user.role|upper }}</strong></p>
+      <p class="small-sub">Mapped Office: <strong>{{ current_user.office_name }}</strong></p>
+      <p class="small-sub">Home City: <strong>{{ current_user.office_city }}</strong> (Local meal limit: ₹{{ "{:,.0f}".format(current_user.local_meal_cap) }})</p>
+    </div>
+  </aside>
+</div>
+
+<!-- BATCH INGESTION VIEW -->
+<div id="batchUploadView" class="batch-grid-layout" style="display: none;">
+  <form class="audit-form-card" method="post" action="{{ url_for('batch_submit') }}" enctype="multipart/form-data">
+    <div class="form-block-head">
+      <div class="block-num">⚡</div>
+      <div>
+        <h3>Batch Month Ingestion</h3>
+        <p>Drop multiple receipts at once. The AI pipeline will process each receipt in sequence, extract financials, detect duplicates, apply caps, and assemble a comprehensive report.</p>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Assign to Employee</label>
+      {% if current_user.role == 'employee' %}
+        <div class="locked-identity-card">
+          <div class="locked-avatar">{{ current_user.name[:2]|upper }}</div>
+          <div class="locked-meta">
+            <div class="locked-name"><strong>{{ current_user.name }}</strong> ({{ current_user.office_name }})</div>
+            <div class="locked-sub">Batch will be imported directly to your employee portfolio.</div>
+          </div>
+          <input type="hidden" name="employee" value="{{ current_user.name }}">
+        </div>
+      {% else %}
+        <select name="employee" class="form-input">
+          {% for u in all_users %}
+            {% if u.role == 'employee' %}
+              <option value="{{ u.name }}">{{ u.name }} ({{ u.office_name }})</option>
+            {% endif %}
+          {% endfor %}
+        </select>
+      {% endif %}
+    </div>
+
+    <div class="drop-zone-container" style="padding: 40px;">
+      <div class="drop-zone-content">
+        <div class="drop-icon-circle">📑</div>
+        <div class="drop-text-primary">Select or drop multiple receipts (PNG, JPG, PDF)</div>
+        <div class="drop-text-sub">Hold Ctrl/Cmd to select multiple files at once</div>
+        <input type="file" name="receipts" multiple accept=".png,.jpg,.jpeg,.webp,.pdf" required class="file-hidden-input" id="batchFileInput">
+      </div>
+    </div>
+    <div id="batchFileList" class="batch-file-list"></div>
+
+    <button type="submit" class="btn btn-primary btn-submit-claim" style="margin-top: 20px;">
+      ⚡ Process & Audit All Receipts in Batch →
+    </button>
+  </form>
+</div>
+
+<!-- LIVE CAMERA CAPTURE MODAL -->
+<div id="cameraModal" class="modal-backdrop" style="display: none;">
+  <div class="modal-dialog camera-modal-dialog">
+    <div class="modal-head">
+      <h3 id="cameraModalTitle">📸 Capture Receipt via Web Camera</h3>
+      <button class="modal-close-btn" onclick="closeCameraModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="camera-stream-box">
+        <video id="cameraVideo" autoplay playsinline class="camera-video-elem"></video>
+        <canvas id="cameraCanvas" style="display: none;"></canvas>
+      </div>
+      <div class="camera-actions-row">
+        <button type="button" class="btn btn-secondary" onclick="closeCameraModal()">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="captureCameraSnapshot()">📸 Take Photo & Use</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let activeCameraTarget = 'bill'; // 'bill' or 'payment'
+let cameraStream = null;
+
+function switchTab(mode) {
+  if (mode === 'single') {
+    document.getElementById('singleUploadView').style.display = 'grid';
+    document.getElementById('batchUploadView').style.display = 'none';
+    document.getElementById('singleTabBtn').classList.add('active');
+    document.getElementById('batchTabBtn').classList.remove('active');
+  } else {
+    document.getElementById('singleUploadView').style.display = 'none';
+    document.getElementById('batchUploadView').style.display = 'block';
+    document.getElementById('singleTabBtn').classList.remove('active');
+    document.getElementById('batchTabBtn').classList.add('active');
+  }
+}
+
+// Bill File Dropzone
+const billDropZone = document.getElementById('billDropZone');
+const billFileInput = document.getElementById('billFileInput');
+const billPreviewWrap = document.getElementById('billPreviewWrap');
+const billImgPreview = document.getElementById('billImgPreview');
+const billFileName = document.getElementById('billFileName');
+
+billDropZone.addEventListener('click', () => billFileInput.click());
+billDropZone.addEventListener('dragover', (e) => { e.preventDefault(); billDropZone.classList.add('drag-active'); });
+billDropZone.addEventListener('dragleave', () => billDropZone.classList.remove('drag-active'));
+billDropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  billDropZone.classList.remove('drag-active');
+  if (e.dataTransfer.files.length) {
+    billFileInput.files = e.dataTransfer.files;
+    handleBillFile(e.dataTransfer.files[0]);
+  }
+});
+billFileInput.addEventListener('change', (e) => {
+  if (e.target.files.length) handleBillFile(e.target.files[0]);
+});
+
+function handleBillFile(file) {
+  billFileName.textContent = file.name;
+  billPreviewWrap.style.display = 'flex';
+  if (file.type !== 'application/pdf') {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      billImgPreview.src = e.target.result;
+      runBillOCR(file);
+    };
+    reader.readAsDataURL(file);
+  } else {
+    billImgPreview.src = '';
+    billImgPreview.alt = 'PDF Document Attached';
+  }
+}
+
+// Payment File Dropzone
+const payDropZone = document.getElementById('payDropZone');
+const payFileInput = document.getElementById('payFileInput');
+const payPreviewWrap = document.getElementById('payPreviewWrap');
+const payImgPreview = document.getElementById('payImgPreview');
+const payFileName = document.getElementById('payFileName');
+
+payDropZone.addEventListener('click', () => payFileInput.click());
+payDropZone.addEventListener('dragover', (e) => { e.preventDefault(); payDropZone.classList.add('drag-active'); });
+payDropZone.addEventListener('dragleave', () => payDropZone.classList.remove('drag-active'));
+payDropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  payDropZone.classList.remove('drag-active');
+  if (e.dataTransfer.files.length) {
+    payFileInput.files = e.dataTransfer.files;
+    handlePayFile(e.dataTransfer.files[0]);
+  }
+});
+payFileInput.addEventListener('change', (e) => {
+  if (e.target.files.length) handlePayFile(e.target.files[0]);
+});
+
+function handlePayFile(file) {
+  payFileName.textContent = file.name;
+  payPreviewWrap.style.display = 'flex';
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    payImgPreview.src = e.target.result;
+    runPaymentOCR(file);
+  };
+  reader.readAsDataURL(file);
+}
+
+// Live Camera Functions
+async function openCameraModal(target) {
+  activeCameraTarget = target;
+  document.getElementById('cameraModalTitle').textContent = target === 'bill' ? '📸 Capture Bill / Invoice' : '📸 Capture Payment Screenshot';
+  document.getElementById('cameraModal').style.display = 'flex';
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    document.getElementById('cameraVideo').srcObject = cameraStream;
+  } catch (err) {
+    alert('Unable to access camera. Please check browser permissions or upload an image file.');
+    closeCameraModal();
+  }
+}
+
+function closeCameraModal() {
+  document.getElementById('cameraModal').style.display = 'none';
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+  }
+}
+
+function captureCameraSnapshot() {
+  const video = document.getElementById('cameraVideo');
+  const canvas = document.getElementById('cameraCanvas');
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const dataUri = canvas.toDataURL('image/jpeg', 0.9);
+
+  if (activeCameraTarget === 'bill') {
+    document.getElementById('billCameraData').value = dataUri;
+    billImgPreview.src = dataUri;
+    billFileName.textContent = 'camera_bill_capture.jpg';
+    billPreviewWrap.style.display = 'flex';
+  } else {
+    document.getElementById('payCameraData').value = dataUri;
+    payImgPreview.src = dataUri;
+    payFileName.textContent = 'camera_payment_capture.jpg';
+    payPreviewWrap.style.display = 'flex';
+  }
+  closeCameraModal();
+}
+
+// Client-Side OCR with Tesseract.js
+async function runBillOCR(file) {
+  if (typeof Tesseract === 'undefined') return;
+  const progressCard = document.getElementById('ocrProgressCard');
+  const statusText = document.getElementById('ocrStatusText');
+  const percentText = document.getElementById('ocrPercentText');
+  const barFill = document.getElementById('ocrBarFill');
+
+  progressCard.style.display = 'block';
+  statusText.textContent = 'Scanning Bill with WebAssembly OCR...';
+  percentText.textContent = '10%';
+  barFill.style.width = '10%';
+
+  try {
+    const worker = await Tesseract.createWorker('eng');
+    const res = await worker.recognize(file);
+    const text = res.data.text;
+    await worker.terminate();
+
+    document.getElementById('ocrRawText').value = text;
+    autofillFromBillText(text);
+
+    statusText.textContent = 'Bill scanned successfully!';
+    percentText.textContent = '100%';
+    barFill.style.width = '100%';
+    setTimeout(() => { progressCard.style.display = 'none'; }, 2000);
+  } catch (e) {
+    progressCard.style.display = 'none';
+  }
+}
+
+async function runPaymentOCR(file) {
+  if (typeof Tesseract === 'undefined') return;
+  try {
+    const worker = await Tesseract.createWorker('eng');
+    const res = await worker.recognize(file);
+    const text = res.data.text;
+    await worker.terminate();
+
+    document.getElementById('payRawText').value = text;
+    autofillFromPaymentText(text);
+  } catch (e) {}
+}
+
+function autofillFromBillText(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+
+  // Merchant
+  for (let l of lines.slice(0, 4)) {
+    if (!l.match(/tax|invoice|bill|receipt|gstin|date|welcome|table/i)) {
+      const clean = l.replace(/[^a-zA-Z0-9\s&\.\-\']/g, '').trim();
+      if (clean.length > 3 && !clean.match(/^\d+$/)) {
+        const mField = document.getElementById('fieldMerchant');
+        if (!mField.value) mField.value = clean;
+        break;
+      }
+    }
+  }
+
+  // Date
+  const dateMatch = text.match(/(\d{4}[-/]\d{1,2}[-/]\d{1,2})|(\d{1,2}[-/]\d{1,2}[-/]\d{4})/);
+  if (dateMatch) {
+    const raw = dateMatch[0];
+    let norm = raw;
+    if (raw.includes('/')) {
+      const parts = raw.split('/');
+      if (parts[0].length === 4) norm = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+      else if (parts[2].length === 4) norm = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+    const dField = document.getElementById('fieldDate');
+    if (!dField.value) dField.value = norm;
+  }
+
+  // Amount
+  const totalMatch = text.match(/(?:grand\s+total|total\s+amount|net\s+payable|total)[\s\:\=]*[₹\$€£Rs\.]*\s*([0-9]{1,6}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)/i);
+  if (totalMatch) {
+    const val = parseFloat(totalMatch[1].replace(/,/g, ''));
+    if (val > 0) document.getElementById('fieldAmount').value = val.toFixed(2);
+  }
+}
+
+function handlePaymentMethodChange() {
+  const method = document.getElementById('fieldPayMethod').value;
+  const isUpi = method === 'UPI' || method.startsWith('UPI');
+  document.getElementById('upiAppWrapper').style.display = isUpi ? 'block' : 'none';
+  document.getElementById('upiVpaWrapper').style.display = isUpi ? 'block' : 'none';
+}
+
+function updateProjectCapHint() {
+  const sel = document.getElementById('fieldProjectCode');
+  if (!sel || !sel.options || !sel.options[sel.selectedIndex]) return;
+  const opt = sel.options[sel.selectedIndex];
+  const cap = parseFloat(opt.dataset.cap || 5000);
+  const name = opt.dataset.name || 'Project';
+  const disp = document.getElementById('projectCapDisplay');
+  if (disp) {
+    disp.textContent = '₹' + cap.toLocaleString('en-IN');
+  }
+}
+
+function autofillFromPaymentText(text) {
+  // UPI Ref / UTR (10 to 14 digits)
+  const refMatch = text.match(/(?:upi\s*(?:ref|reference)?\s*(?:no|id|txn|transaction)?[:\s#]*|utr[:\s#]*|txn\s*id[:\s#]*)(\d{10,14})/i);
+  if (refMatch) {
+    document.getElementById('fieldTxnRef').value = refMatch[1];
+  }
+
+  // Detect UPI Platform
+  const lower = text.toLowerCase ? text.toLowerCase() : text;
+  let detectedUpi = false;
+  if (lower.includes('google pay') || lower.includes('gpay')) {
+    document.getElementById('fieldPayMethod').value = 'UPI';
+    document.getElementById('fieldUpiApp').value = 'Google Pay';
+    detectedUpi = true;
+  } else if (lower.includes('phonepe')) {
+    document.getElementById('fieldPayMethod').value = 'UPI';
+    document.getElementById('fieldUpiApp').value = 'PhonePe';
+    detectedUpi = true;
+  } else if (lower.includes('paytm')) {
+    document.getElementById('fieldPayMethod').value = 'UPI';
+    document.getElementById('fieldUpiApp').value = 'Paytm';
+    detectedUpi = true;
+  } else if (lower.includes('cred')) {
+    document.getElementById('fieldPayMethod').value = 'UPI';
+    document.getElementById('fieldUpiApp').value = 'CRED';
+    detectedUpi = true;
+  } else if (lower.includes('bhim')) {
+    document.getElementById('fieldPayMethod').value = 'UPI';
+    document.getElementById('fieldUpiApp').value = 'BHIM UPI';
+    detectedUpi = true;
+  }
+
+  // Extract UPI VPA (e.g. name@okhdfcbank, merchant@upi, user@paytm, etc.)
+  const vpaMatch = text.match(/([a-zA-Z0-9.\-_]{2,35}@[a-zA-Z]{2,15})/);
+  if (vpaMatch) {
+    const vpaField = document.getElementById('fieldUpiVpa');
+    if (vpaField && !vpaField.value) vpaField.value = vpaMatch[1];
+  }
+
+  handlePaymentMethodChange();
+}
+
+function updateEmployeeOfficeHint() {
+  const sel = document.getElementById('fieldEmployee');
+  if (!sel || !sel.options) return;
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt) return;
+  const office = opt.dataset.office || 'Corporate Office';
+  const city = opt.dataset.city || 'Mumbai';
+  const hint = document.getElementById('officeMappingHint');
+  if (hint) {
+    hint.innerHTML = `📍 Mapped Home Office: <strong>${office} (${city})</strong>`;
+  }
+}
+
+function handleTripChange() {
+  const isTrip = document.getElementById('isTripCheckbox').checked;
+  const projQuestion = document.getElementById('projectQuestionBlock');
+  if (projQuestion) {
+    projQuestion.style.display = isTrip ? 'block' : 'none';
+  }
+  handleProjectChange();
+}
+
+function handleProjectChange() {
+  const isTrip = document.getElementById('isTripCheckbox').checked;
+  const isProject = document.getElementById('isProjectCheckbox').checked;
+  const projSelectBlock = document.getElementById('projectSelectBlock');
+  if (projSelectBlock) {
+    if (isTrip && !isProject) {
+      projSelectBlock.style.display = 'none';
+    } else {
+      projSelectBlock.style.display = 'block';
+    }
+  }
+}
+
+const CITY_CURRENCY_MAP = {
+  'Mumbai': 'INR', 'Delhi': 'INR', 'Bengaluru': 'INR', 'Pune': 'INR',
+  'Hyderabad': 'INR', 'Chennai': 'INR', 'Kolkata': 'INR', 'Ahmedabad': 'INR',
+  'Jaipur': 'INR', 'Gurugram': 'INR', 'Noida': 'INR',
+  'New York': 'USD', 'San Francisco': 'USD', 'Chicago': 'USD', 'Austin': 'USD', 'Seattle': 'USD',
+  'London': 'GBP',
+  'Dubai': 'AED', 'Abu Dhabi': 'AED',
+  'Frankfurt': 'EUR', 'Paris': 'EUR', 'Amsterdam': 'EUR', 'Berlin': 'EUR',
+  'Tokyo': 'JPY',
+  'Singapore': 'SGD'
+};
+
+function updateCurrencyByCity() {
+  const cityEl = document.getElementById('fieldCity');
+  const currEl = document.getElementById('fieldCurrency');
+  if (!cityEl || !currEl) return;
+  const city = cityEl.value;
+  const targetCurr = CITY_CURRENCY_MAP[city] || 'INR';
+  currEl.value = targetCurr;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  updateProjectCapHint();
+  handlePaymentMethodChange();
+  handleTripChange();
+  updateCurrencyByCity();
+
+  // Restrict future date selection
+  const dateInput = document.getElementById('fieldDate');
+  if (dateInput) {
+    const today = new Date().toISOString().split('T')[0];
+    dateInput.max = today;
+  }
+});
+</script>
+{% endblock %}

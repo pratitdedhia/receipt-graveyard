@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}Month-in-Review & Emerging Patterns · Receipt Graveyard{% endblock %}
+
+{% block content %}
+<div class="analytics-head">
+  <div class="eyebrow-chip">TEMPORAL AUDIT & PATTERN RECOGNITION · OCTOBER 2026</div>
+  <h1 class="page-title">Month-in-Review: <span>Emerging Patterns.</span></h1>
+  <p class="page-intro">
+    As receipts accumulate across the month, patterns emerge: multi-day business trips, running city per-diem cap overruns, smurfing split transactions, and cross-employee collusion.
+  </p>
+</div>
+
+<!-- Reconstructed Trips Section -->
+<section class="analytics-block">
+  <div class="block-header-row">
+    <div>
+      <span class="card-eyebrow">AUTOMATED ITINERARY RECONSTRUCTION</span>
+      <h2 class="block-title">Reconstructed Business Trips ({{ trips|length }})</h2>
+    </div>
+    <div class="block-tag">Auto-Clustered by City & Date Proximity</div>
+  </div>
+
+  <div class="table-container">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>TRIP ID</th>
+          <th>EMPLOYEE</th>
+          <th>DESTINATION</th>
+          <th>DATE RANGE</th>
+          <th>RECEIPTS</th>
+          <th>CLAIMED</th>
+          <th>REIMBURSABLE</th>
+          <th>SAVINGS</th>
+          <th>COMPLIANCE</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in trips %}
+        <tr>
+          <td><span class="id-badge">{{ t.id }}</span></td>
+          <td><strong>{{ t.employee }}</strong></td>
+          <td><span class="trip-city-badge">✈ {{ t.city }}</span></td>
+          <td>{{ t.start_date }} to {{ t.end_date }}</td>
+          <td>{{ t.claims_count }} receipts</td>
+          <td class="font-mono">₹{{ "{:,.2f}".format(t.total_claimed) }}</td>
+          <td class="font-mono color-green">₹{{ "{:,.2f}".format(t.total_reimbursable) }}</td>
+          <td class="font-mono color-amber">₹{{ "{:,.2f}".format(max(0, t.total_claimed - t.total_reimbursable)) }}</td>
+          <td>
+            <span class="status-pill status-{{ 'approved' if t.status == 'Compliant' else 'needs-review' }}">
+              {{ t.status }}
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if not trips %}
+      <div class="empty-state">No out-of-town trips detected yet.</div>
+    {% endif %}
+  </div>
+</section>
+
+<!-- Employee Spend & Compliance Leaderboard -->
+<section class="analytics-block">
+  <div class="block-header-row">
+    <div>
+      <span class="card-eyebrow">EMPLOYEE COMPLIANCE AUDIT</span>
+      <h2 class="block-title">Employee Spend & Policy Compliance Leaderboard</h2>
+    </div>
+  </div>
+
+  <div class="table-container">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>EMPLOYEE</th>
+          <th>CLAIMS SUBMITTED</th>
+          <th>TOTAL CLAIMED</th>
+          <th>REIMBURSABLE</th>
+          <th>DEDUCTIONS / CAPS</th>
+          <th>POLICY BREACHES</th>
+          <th>COMPLIANCE RATING</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for emp_name, s in emp_stats.items() %}
+        {% set compliance_pct = ((s.count - s.violations) / s.count * 100)|round(0)|int if s.count > 0 else 100 %}
+        <tr>
+          <td>
+            <strong>{{ emp_name }}</strong>
+          </td>
+          <td>{{ s.count }} claims</td>
+          <td class="font-mono">₹{{ "{:,.2f}".format(s.claimed) }}</td>
+          <td class="font-mono color-green">₹{{ "{:,.2f}".format(s.reimbursable) }}</td>
+          <td class="font-mono color-red">₹{{ "{:,.2f}".format(max(0, s.claimed - s.reimbursable)) }}</td>
+          <td>
+            <span class="badge-count {% if s.violations > 0 %}badge-amber{% else %}badge-green{% endif %}">
+              {{ s.violations }} flagged
+            </span>
+          </td>
+          <td>
+            <div class="compliance-track">
+              <div class="compliance-fill {% if compliance_pct >= 80 %}fill-green{% elif compliance_pct >= 50 %}fill-amber{% else %}fill-red{% endif %}" style="width: {{ compliance_pct }}%;"></div>
+            </div>
+            <span class="font-mono small-sub">{{ compliance_pct }}% compliant</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- Violation & Fraud Taxonomy Grid -->
+<section class="analytics-block">
+  <div class="block-header-row">
+    <div>
+      <span class="card-eyebrow">AUDIT TAXONOMY</span>
+      <h2 class="block-title">Detected Violation Types & Fraud Indicators</h2>
+    </div>
+  </div>
+
+  <div class="violations-grid">
+    {% for v_type, v_count in violations_map.items() %}
+    <div class="violation-card">
+      <div class="violation-count">{{ v_count }}</div>
+      <div class="violation-name">{{ v_type }}</div>
+      <div class="violation-bar">
+        <div class="violation-bar-fill" style="width: {{ min(100, v_count * 20) }}%;"></div>
+      </div>
+    </div>
+    {% endfor %}
+    {% if not violations_map %}
+      <div class="empty-state">No policy violations detected.</div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

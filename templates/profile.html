@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% block title %}{{ user.name }} · User Profile & Claims · Receipt Graveyard{% endblock %}
+
+{% block content %}
+<div class="profile-header-card">
+  <div class="profile-avatar-large" style="background: {{ user.avatar_color or '#0f766e' }};">
+    {{ user.name[:2]|upper }}
+  </div>
+  <div class="profile-main-meta">
+    <div class="profile-title-row">
+      <h1 class="profile-name">{{ user.name }}</h1>
+      <span class="user-role-badge role-{{ user.role }}">{{ user.role|upper }}</span>
+      {% if user.is_active %}
+        <span class="badge-status-active">● Active Account</span>
+      {% else %}
+        <span class="badge-status-inactive">○ Deactivated</span>
+      {% endif %}
+    </div>
+    <div class="profile-sub-meta">
+      <span>✉ {{ user.email }}</span>
+      <span>·</span>
+      <span>📞 {{ user.phone or '+91 Unspecified' }}</span>
+      <span>·</span>
+      <span>🏢 Department: <strong>{{ user.department or 'Operations' }}</strong></span>
+    </div>
+    <div class="profile-office-banner">
+      <span class="office-pin">📍</span>
+      <span>Home Office Jurisdiction: <strong>{{ user.office_name or 'Mumbai HQ' }}</strong> ({{ user.office_city or 'Mumbai' }}, {{ user.office_state or 'MH' }})</span>
+      <span class="cap-tag">Local Meal Cap: <strong>₹{{ "{:,.0f}".format(user.local_meal_cap or 1200) }}</strong> / day</span>
+    </div>
+  </div>
+  <div class="profile-quick-actions">
+    <a href="{{ url_for('submit') }}" class="btn btn-primary">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      Submit New Expense
+    </a>
+    {% if current_user.role == 'admin' %}
+      <a href="{{ url_for('admin_console') }}" class="btn btn-secondary">Admin Console ↗</a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Personal Financial Summary Metrics -->
+<section class="metrics-grid" style="margin-top: 24px;">
+  <div class="metric-card">
+    <div class="metric-head">
+      <span class="metric-label">MY SUBMISSIONS</span>
+      <span class="metric-icon">📑</span>
+    </div>
+    <div class="metric-value">{{ stats.total_claims }}</div>
+    <div class="metric-sub">Total expense claims submitted</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-head">
+      <span class="metric-label">APPROVED REIMBURSEMENT</span>
+      <span class="metric-icon">✓</span>
+    </div>
+    <div class="metric-value color-green">₹{{ "{:,.2f}".format(stats.approved_amount) }}</div>
+    <div class="metric-sub">{{ stats.approved_count }} fully approved claims</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-head">
+      <span class="metric-label">PENDING AUDIT</span>
+      <span class="metric-icon">⏳</span>
+    </div>
+    <div class="metric-value color-amber">{{ stats.pending_count }}</div>
+    <div class="metric-sub">Under review or awaiting documents</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-head">
+      <span class="metric-label">TOTAL CLAIMED (GROSS)</span>
+      <span class="metric-icon">💳</span>
+    </div>
+    <div class="metric-value">₹{{ "{:,.2f}".format(stats.total_claimed) }}</div>
+    <div class="metric-sub">Gross amount before policy caps</div>
+  </div>
+</section>
+
+<!-- Profile Layout: Edit Form + Authorized Projects -->
+<div class="profile-two-col-grid" style="margin-top: 30px;">
+  <!-- Column 1: Update Profile & Credentials -->
+  <div class="panel-box">
+    <div class="card-eyebrow">ACCOUNT SETTINGS</div>
+    <h3 class="panel-title">Update Contact & Credentials</h3>
+    <p class="small-sub" style="margin-bottom: 16px;">
+      Maintain accurate department and phone information for reimbursement disbursements.
+    </p>
+
+    <form method="post" action="{{ url_for('profile') }}" class="profile-edit-form">
+      <div class="form-group">
+        <label>Full Name</label>
+        <input type="text" value="{{ user.name }}" disabled class="form-input form-input-disabled">
+        <small class="text-muted">Account name is verified by company directory.</small>
+      </div>
+
+      <div class="form-group">
+        <label>Email Address</label>
+        <input type="email" value="{{ user.email }}" disabled class="form-input form-input-disabled">
+      </div>
+
+      <div class="input-row-2">
+        <div class="form-group">
+          <label>Department / Team</label>
+          <input type="text" name="department" value="{{ user.department or 'Operations' }}" required class="form-input">
+        </div>
+        <div class="form-group">
+          <label>Phone / WhatsApp</label>
+          <input type="text" name="phone" value="{{ user.phone or '' }}" placeholder="+91 98000 00000" class="form-input">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Change Password <small class="text-muted">(Leave blank to keep current)</small></label>
+        <input type="password" name="new_password" placeholder="New secure password" class="form-input">
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="margin-top: 8px;">
+        Save Profile Changes
+      </button>
+    </form>
+  </div>
+
+  <!-- Column 2: Authorized Projects & Auto-Approval Reimbursement Caps -->
+  <div class="panel-box">
+    <div class="card-eyebrow">PROJECT ALLOCATIONS</div>
+    <h3 class="panel-title">Active Projects & Auto-Approval Limits</h3>
+    <p class="small-sub" style="margin-bottom: 16px;">
+      Claims below a project's configured cap with zero risk score are fast-tracked for autonomous reimbursement.
+    </p>
+
+    <div class="project-caps-stack">
+      {% for p in all_projects %}
+      <div class="project-cap-item">
+        <div class="prj-item-left">
+          <div class="prj-code-badge">{{ p.code }}</div>
+          <div>
+            <strong>{{ p.name }}</strong>
+            <div class="table-sub">Client: {{ p.client_name or 'Enterprise Internal' }} · Manager: {{ p.manager_name or 'Unassigned' }}</div>
+          </div>
+        </div>
+        <div class="prj-item-right">
+          <span class="cap-pill">Auto-Cap: <strong>₹{{ "{:,.0f}".format(p.auto_approval_cap) }}</strong></span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="profile-tip-box" style="margin-top: 18px;">
+      💡 <strong>Policy Tip:</strong> Travel out of town automatically applies destination city per-diems (up to ₹2,500/day) and ₹2,200 meal allowances.
+    </div>
+  </div>
+</div>
+
+<!-- Recent Personal Claims Table -->
+<section class="inbox-header" style="margin-top: 40px;">
+  <div>
+    <div class="eyebrow-text">MY EXPENSE AUDIT LEDGER</div>
+    <h2 class="inbox-title">Recent Submissions <span class="badge-count">{{ claims|length }}</span></h2>
+  </div>
+</section>
+
+<div class="table-container">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>ID / DATE</th>
+        <th>MERCHANT & CATEGORY</th>
+        <th>PROJECT</th>
+        <th>CLAIMED</th>
+        <th>REIMBURSABLE</th>
+        <th>RISK SCORE</th>
+        <th>STATUS</th>
+        <th>ACTIONS</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in claims %}
+      <tr>
+        <td>
+          <span class="claim-id font-mono">#{{ c.id }}</span>
+          <div class="table-sub">{{ c.expense_date or c.submitted_at[:10] }}</div>
+        </td>
+        <td>
+          <strong>{{ c.merchant or 'Vendor' }}</strong>
+          <div class="table-sub">{{ c.category }} · {{ c.city }}</div>
+        </td>
+        <td>
+          <span class="project-tag">{{ c.project_code or 'PRJ-2026-Q4' }}</span>
+        </td>
+        <td class="font-mono">₹{{ "{:,.2f}".format(c.amount_inr or 0) }}</td>
+        <td class="font-mono color-green">
+          <strong>₹{{ "{:,.2f}".format(c.reimbursable or 0) }}</strong>
+        </td>
+        <td>
+          <span class="risk-badge {% if c.risk_score >= 50 %}risk-high{% elif c.risk_score >= 20 %}risk-mid{% else %}risk-low{% endif %}">
+            {{ c.risk_score }}
+          </span>
+        </td>
+        <td>
+          <span class="status-pill status-{{ c.status|lower|replace(' ','-')|replace('_','-') }}">
+            {{ c.status }}
+          </span>
+        </td>
+        <td class="action-cell">
+          <a href="{{ url_for('expense_detail', expense_id=c.id) }}" class="btn-action">View Details →</a>
+          <a href="{{ url_for('expense_voucher', expense_id=c.id) }}" target="_blank" class="btn-action-icon" title="Print Voucher">🖨</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="8" style="text-align: center; padding: 32px; color: var(--text-muted);">
+          No expense claims submitted yet. Click "Submit New Expense" above to audit your first receipt.
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,606 @@
+{% extends "base.html" %}
+{% block title %}Command Center · Receipt Graveyard AI Auditor{% endblock %}
+
+{% block content %}
+{% if current_user.role == 'employee' %}
+<!-- ================= EMPLOYEE WORKSPACE DASHBOARD ================= -->
+<section class="hero-section employee-hero">
+  <div class="hero-content">
+    <div class="eyebrow-chip">MY REIMBURSEMENT PORTAL · EMPLOYEE WORKSPACE</div>
+    <h1 class="hero-title">Submit & Track Your Claims.<br><span>Transparent, Instant Reimbursements.</span></h1>
+    <p class="hero-desc">
+      File itemized bills and payment proofs against your authorized projects. Monitor AI validation, promptly respond to Accounts document requests, and track your payout disbursements.
+    </p>
+  </div>
+  <div class="hero-actions">
+    <a class="btn btn-primary" href="{{ url_for('submit') }}">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      Submit New Expense
+    </a>
+    <a class="btn btn-secondary" href="{{ url_for('profile') }}">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+      My Profile & Projects
+    </a>
+  </div>
+</section>
+
+<!-- Employee Personal KPI Metrics -->
+<section class="metrics-grid">
+  <div class="metric-card">
+    <div class="metric-head">
+      <span class="metric-label">MY SUBMISSIONS</span>
+      <span class="metric-icon">📑</span>
+    </div>
+    <div class="metric-value">{{ stats.total }}</div>
+    <div class="metric-sub">Submitted expense claims</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-head">
+      <span class="metric-label">IN FINANCE AUDIT</span>
+      <span class="metric-icon">⏳</span>
+    </div>
+    <div class="metric-value color-amber">{{ stats.pending }}</div>
+    <div class="metric-sub">Awaiting review or validation</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-head">
+      <span class="metric-label">APPROVED & ELIGIBLE</span>
+      <span class="metric-icon">✓</span>
+    </div>
+    <div class="metric-value color-green">{{ stats.approved }}</div>
+    <div class="metric-sub">100% compliant with company policy</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-head">
+      <span class="metric-label">ACTION / DISALLOWED</span>
+      <span class="metric-icon">⚠️</span>
+    </div>
+    <div class="metric-value {% if stats.flagged > 0 %}color-red{% else %}color-green{% endif %}">{{ stats.flagged }}</div>
+    <div class="metric-sub">Requires documents or policy capped</div>
+  </div>
+</section>
+
+<!-- Employee Personal Financial Summary Banner -->
+<section class="finance-banner">
+  <div class="finance-col">
+    <span class="banner-eyebrow">MY TOTAL CLAIMED</span>
+    <div class="banner-amount">₹{{ "{:,.2f}".format(stats.claimed) }}</div>
+    <span class="banner-hint">Gross value of your submitted bills</span>
+  </div>
+  <div class="finance-divider"></div>
+  <div class="finance-col">
+    <span class="banner-eyebrow">APPROVED FOR REIMBURSEMENT</span>
+    <div class="banner-amount color-green">₹{{ "{:,.2f}".format(stats.reimbursable) }}</div>
+    <span class="banner-hint">Net payout scheduled or disbursed</span>
+  </div>
+  <div class="finance-divider"></div>
+  <div class="finance-col">
+    <span class="banner-eyebrow">POLICY DEDUCTIONS / EXCESS</span>
+    <div class="banner-amount color-amber">₹{{ "{:,.2f}".format(max(0, stats.claimed - stats.reimbursable)) }}</div>
+    <span class="banner-hint">Disallowed alcohol or per-diem caps</span>
+  </div>
+</section>
+
+<!-- Employee Submissions Ledger Header & Filters -->
+<section class="inbox-header">
+  <div>
+    <div class="eyebrow-text">MY EXPENSE LEDGER</div>
+    <h2 class="inbox-title">Your Claims & Receipts <span class="badge-count" id="visibleCount">{{ expenses|length }}</span></h2>
+  </div>
+
+  <div class="filter-toolbar">
+    <div class="search-input-wrap">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      <input id="searchBox" type="search" placeholder="Search merchant, project, category, status…">
+    </div>
+
+    <div class="filter-pills" id="statusFilterPills">
+      <button class="pill active" data-status="">All</button>
+      <button class="pill" data-status="Needs Info,ADDITIONAL_INFORMATION_REQUESTED">Needs Info ⚠️</button>
+      <button class="pill" data-status="Needs Review,PENDING_ACCOUNTS_REVIEW,RESUBMITTED">In Review</button>
+      <button class="pill" data-status="Approved,AUTO_APPROVED">Approved ✓</button>
+      <button class="pill" data-status="REIMBURSEMENT_PENDING,REIMBURSED">Reimbursed 💳</button>
+      <button class="pill" data-status="DRAFT">Drafts 💾</button>
+      <button class="pill" data-status="Rejected,Duplicate">Rejected</button>
+    </div>
+  </div>
+</section>
+
+<!-- Employee Claims Table -->
+<div class="table-container">
+  <table class="data-table" id="expenseTable">
+    <thead>
+      <tr>
+        <th>CLAIM ID / DATE</th>
+        <th>PROJECT & PURPOSE</th>
+        <th>MERCHANT & CATEGORY</th>
+        <th>CLAIMED</th>
+        <th>ELIGIBLE PAYOUT</th>
+        <th>PAYMENT PROOF</th>
+        <th>STATUS</th>
+        <th>ACTION</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in expenses %}
+      <tr 
+        data-status="{{ e.status }}" 
+        data-risk="{{ e.risk_score }}"
+        data-trip="{{ e.is_trip }}"
+        data-search="{{ (e.merchant ~ ' ' ~ e.category ~ ' ' ~ (e.project_code or '') ~ ' ' ~ (e.city or '') ~ ' ' ~ e.status ~ ' ' ~ (e.description or '') ~ ' ' ~ (e.flags or ''))|lower }}"
+      >
+        <td>
+          <div class="id-badge">#{{ e.id }}</div>
+          <div class="table-sub">{{ e.expense_date or 'No date' }}</div>
+        </td>
+
+        <td>
+          <div class="emp-name font-mono">{{ e.project_code or 'PRJ-GENERAL' }}</div>
+          <div class="table-sub">{{ (e.description or 'No business purpose entered')[:40] }}{% if e.description and e.description|length > 40 %}...{% endif %}</div>
+        </td>
+
+        <td>
+          <div class="merchant-name">{{ e.merchant or 'Unknown Merchant' }}</div>
+          <div class="table-sub">{{ e.category }} · {{ e.city or 'Local' }}</div>
+        </td>
+
+        <td>
+          <div class="amount-primary">₹{{ "{:,.2f}".format(e.amount_inr or 0) }}</div>
+          {% if e.currency and e.currency != 'INR' %}
+            <div class="table-sub">{{ e.currency }} {{ "{:,.2f}".format(e.amount or 0) }}</div>
+          {% endif %}
+        </td>
+
+        <td>
+          <div class="amount-reimb {% if e.reimbursable < e.amount_inr and e.reimbursable > 0 %}capped{% elif e.reimbursable == 0 %}zero{% endif %}">
+            ₹{{ "{:,.2f}".format(e.reimbursable or 0) }}
+          </div>
+          {% if e.reimbursable < e.amount_inr and e.reimbursable > 0 %}
+            <span class="capped-badge">Capped</span>
+          {% elif e.non_reimbursable_deduction > 0 %}
+            <span class="deducted-badge">-₹{{ "{:,.0f}".format(e.non_reimbursable_deduction) }}</span>
+          {% endif %}
+        </td>
+
+        <td>
+          {% if e.payment_verified %}
+            <span class="math-badge verified" title="UPI Payment Reconciled">✓ {{ e.payment_method or 'UPI' }}</span>
+          {% elif e.payment_file %}
+            <span class="math-badge single" title="Proof Attached">📱 Proof Attached</span>
+          {% else %}
+            <span class="table-sub font-mono">{{ e.payment_method or 'UPI' }}</span>
+          {% endif %}
+        </td>
+
+        <td>
+          <span class="status-pill status-{{ e.status|lower|replace(' ', '-')|replace('_', '-') }}">
+            {{ e.status|replace('_', ' ') }}
+          </span>
+          {% if e.status in ('Needs Info', 'ADDITIONAL_INFORMATION_REQUESTED') %}
+            <div class="table-sub color-amber" style="font-weight:600; margin-top:2px;">⚠️ Action Required</div>
+          {% endif %}
+        </td>
+
+        <td class="action-cell">
+          <a class="btn-inspect" href="{{ url_for('expense_detail', expense_id=e.id) }}">
+            {% if e.status in ('Needs Info', 'ADDITIONAL_INFORMATION_REQUESTED') %}
+              Respond & Upload →
+            {% elif e.status == 'DRAFT' %}
+              Edit & Submit →
+            {% else %}
+              View Claim →
+            {% endif %}
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if not expenses %}
+    <div class="empty-state">
+      <div class="empty-icon">🧾</div>
+      <h3>You have not submitted any reimbursement claims yet</h3>
+      <p>Submit your first receipt and payment screenshot to experience automated AI verification.</p>
+      <a href="{{ url_for('submit') }}" class="btn btn-primary" style="margin-top: 15px;">Submit First Receipt</a>
+    </div>
+  {% endif %}
+</div>
+
+<!-- Employee Guidelines Card -->
+<section class="bottom-intel-grid">
+  <div class="intel-card">
+    <div class="card-eyebrow">SUBMISSION POLICY GUIDELINES</div>
+    <h3 class="card-title">How To Ensure Instant Auto-Approval</h3>
+    <div class="check-matrix">
+      <div class="check-item"><span class="check-dot green"></span><strong>Dual Proofs:</strong> Always attach both the itemized bill and payment screenshot (GPay, PhonePe, Paytm).</div>
+      <div class="check-item"><span class="check-dot green"></span><strong>Project Caps:</strong> Claims within your project's configured auto-approval cap with clean receipts approve automatically.</div>
+      <div class="check-item"><span class="check-dot green"></span><strong>Client Meals:</strong> Meal claims exceeding ₹1,200 must specify client organization name.</div>
+      <div class="check-item"><span class="check-dot green"></span><strong>Group Dinners:</strong> Dining claims exceeding ₹1,000 must include attendee counts.</div>
+      <div class="check-item"><span class="check-dot amber"></span><strong>Disallowed Items:</strong> Alcohol, tobacco, and personal incidentals are strictly non-reimbursable.</div>
+      <div class="check-item"><span class="check-dot blue"></span><strong>Editing Window:</strong> You can edit claims within {{ system_settings.editing_window_hours }} hours post-submission.</div>
+    </div>
+  </div>
+
+  <div class="intel-card accent-card">
+    <div class="card-eyebrow">YOUR JURISDICTION & HOME OFFICE</div>
+    <h3 class="card-title">{{ current_user.office_name or 'Mumbai HQ' }}</h3>
+    <p class="card-desc">
+      Your account is mapped to <strong>{{ current_user.office_city or 'Mumbai' }}</strong>. Local office meal cap: <strong>₹{{ "{:,.0f}".format(current_user.local_meal_cap) }}/meal</strong>.
+    </p>
+    <div class="trips-mini-list" style="margin-top: 14px;">
+      <div class="trip-mini-item">
+        <div>
+          <strong>Out-of-Town Business Trips</strong>
+          <div class="trip-dates">Automatic daily per-diem rate of ₹2,200 applies for travel meals outside your home city.</div>
+        </div>
+      </div>
+      <div class="trip-mini-item">
+        <div>
+          <strong>Document Inquiries</strong>
+          <div class="trip-dates">If Accounts requests additional documents, you will receive an in-app alert and can upload proof on the claim page.</div>
+        </div>
+      </div>
+    </div>
+    <a href="{{ url_for('profile') }}" class="view-all-link">Review your profile & authorized projects ↗</a>
+  </div>
+</section>
+
+{% else %}
+<!-- ================= ADMIN & ACCOUNTS COMMAND CENTER ================= -->
+<section class="hero-section">
+  <div class="hero-content">
+    <div class="eyebrow-chip">FINANCE COMMAND CENTER · OCTOBER 2026 AUDIT</div>
+    <h1 class="hero-title">Stop chasing receipts.<br><span>Start making explainable decisions.</span></h1>
+    <p class="hero-desc">
+      Autonomous multi-layer policy engine matching messy, multi-channel receipts against travel per-diems, category caps, itemized non-reimbursable alcohol deductions, and multi-vector fraud indicators.
+    </p>
+  </div>
+  <div class="hero-actions">
+    <a class="btn btn-primary" href="{{ url_for('submit') }}">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      Audit New Receipt
+    </a>
+    <a class="btn btn-secondary" href="{{ url_for('analytics') }}">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+      Month-in-Review & Trips
+    </a>
+  </div>
+</section>
+
+<!-- Executive KPI Metrics -->
+<section class="metrics-grid">
+  <div class="metric-card">
+    <div class="metric-head">
+      <span class="metric-label">TOTAL SUBMISSIONS</span>
+      <span class="metric-icon">📑</span>
+    </div>
+    <div class="metric-value">{{ stats.total }}</div>
+    <div class="metric-sub">Across Web, Email, Slack & Mobile</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-head">
+      <span class="metric-label">NEEDS ATTENTION</span>
+      <span class="metric-icon">⚠️</span>
+    </div>
+    <div class="metric-value color-amber">{{ stats.pending }}</div>
+    <div class="metric-sub">Pending policy review or missing info</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-head">
+      <span class="metric-label">APPROVED REIMBURSEMENTS</span>
+      <span class="metric-icon">✓</span>
+    </div>
+    <div class="metric-value color-green">{{ stats.approved }}</div>
+    <div class="metric-sub">100% compliant with company policy</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-head">
+      <span class="metric-label">FLAGGED / FRAUD</span>
+      <span class="metric-icon">🛡️</span>
+    </div>
+    <div class="metric-value color-red">{{ stats.flagged }}</div>
+    <div class="metric-sub">{{ stats.duplicates_count }} duplicates & out-of-policy claims</div>
+  </div>
+</section>
+
+<!-- Financial Comparison Banner -->
+<section class="finance-banner">
+  <div class="finance-col">
+    <span class="banner-eyebrow">TOTAL CLAIMED (GROSS)</span>
+    <div class="banner-amount">₹{{ "{:,.2f}".format(stats.claimed) }}</div>
+    <span class="banner-hint">Submitted by staff across the month</span>
+  </div>
+  <div class="finance-divider"></div>
+  <div class="finance-col">
+    <span class="banner-eyebrow">APPROVED REIMBURSEMENT (NET)</span>
+    <div class="banner-amount color-green">₹{{ "{:,.2f}".format(stats.reimbursable) }}</div>
+    <span class="banner-hint">After category caps & non-reimbursable deductions</span>
+  </div>
+  <div class="finance-divider"></div>
+  <div class="finance-col">
+    <span class="banner-eyebrow">POLICY SAVINGS PROTECTED</span>
+    <div class="banner-amount color-amber">₹{{ "{:,.2f}".format(max(0, stats.claimed - stats.reimbursable)) }}</div>
+    <span class="banner-hint">Capped spend, duplicates blocked & deductions</span>
+  </div>
+</section>
+
+<!-- Control Bar: Bulk Actions & Quick Seeder -->
+<section class="demo-controls-bar">
+  <div class="controls-left">
+    <span class="controls-title">⚡ Finance Controls:</span>
+    <form method="post" action="{{ url_for('bulk_action') }}" style="display:inline;">
+      <input type="hidden" name="action" value="seed_dataset">
+      <button type="submit" class="btn btn-sm btn-accent" title="Loads full 1-month realistic dataset (24 receipts across all edge cases)">
+        📥 Reload 1-Month Dataset
+      </button>
+    </form>
+    <form method="post" action="{{ url_for('bulk_action') }}" style="display:inline;">
+      <input type="hidden" name="action" value="approve_clean">
+      <button type="submit" class="btn btn-sm btn-outline-green" title="Auto-approves all pending claims with 0 risk score">
+        ⚡ Auto-Approve Clean (0-Risk)
+      </button>
+    </form>
+    {% if current_user.role == 'admin' %}
+    <form method="post" action="{{ url_for('bulk_action') }}" style="display:inline;" onsubmit="return confirm('Reset the database? You can re-seed anytime with the 1-Month Dataset button.');">
+      <input type="hidden" name="action" value="reset_db">
+      <button type="submit" class="btn btn-sm btn-ghost-danger">
+        ↺ Reset DB
+      </button>
+    </form>
+    {% endif %}
+  </div>
+  <div class="controls-right">
+    <a href="{{ url_for('export_standardized_zip') }}" class="btn btn-sm btn-primary">
+      📦 Standardized 8-File Export (.zip)
+    </a>
+    <a href="{{ url_for('export_csv') }}" class="btn btn-sm btn-secondary">
+      ⬇ Export CSV
+    </a>
+    <a href="{{ url_for('export_json') }}" target="_blank" class="btn btn-sm btn-secondary">
+      { } JSON API
+    </a>
+  </div>
+</section>
+
+<!-- Submissions Inbox Header & Live Filters -->
+<section class="inbox-header">
+  <div>
+    <div class="eyebrow-text">AUDITED EXPENSE INBOX</div>
+    <h2 class="inbox-title">Receipt Submissions <span class="badge-count" id="visibleCount">{{ expenses|length }}</span></h2>
+  </div>
+
+  <div class="filter-toolbar">
+    <div class="search-input-wrap">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      <input id="searchBox" type="search" placeholder="Search employee, merchant, city, category, flag…">
+    </div>
+
+    <div class="filter-pills" id="statusFilterPills">
+      <button class="pill active" data-status="">All</button>
+      <button class="pill" data-status="Needs Review,PENDING_ACCOUNTS_REVIEW,RESUBMITTED">Needs Review</button>
+      <button class="pill" data-status="Needs Info,ADDITIONAL_INFORMATION_REQUESTED">Needs Info</button>
+      <button class="pill" data-status="Approved,AUTO_APPROVED">Approved</button>
+      <button class="pill" data-status="REIMBURSEMENT_PENDING,REIMBURSED">Reimbursements</button>
+      <button class="pill" data-status="Duplicate">Duplicate</button>
+      <button class="pill" data-status="Rejected">Rejected</button>
+      <button class="pill" data-risk="high">High Risk (50+)</button>
+    </div>
+  </div>
+</section>
+
+<!-- Submissions Data Table -->
+<div class="table-container">
+  <table class="data-table" id="expenseTable">
+    <thead>
+      <tr>
+        <th>ID / DATE</th>
+        <th>EMPLOYEE & CHANNEL</th>
+        <th>MERCHANT & CATEGORY</th>
+        <th>CLAIMED</th>
+        <th>REIMBURSABLE</th>
+        <th>MATH AUDIT</th>
+        <th>RISK SCORE</th>
+        <th>DECISION STATUS</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in expenses %}
+      <tr 
+        data-status="{{ e.status }}" 
+        data-risk="{{ e.risk_score }}"
+        data-trip="{{ e.is_trip }}"
+        data-search="{{ (e.employee ~ ' ' ~ e.merchant ~ ' ' ~ e.category ~ ' ' ~ e.city ~ ' ' ~ e.status ~ ' ' ~ (e.flags or ''))|lower }}"
+      >
+        <td>
+          <div class="id-badge">#{{ e.id }}</div>
+          <div class="table-sub">{{ e.expense_date or 'No date' }}</div>
+        </td>
+
+        <td>
+          <div class="emp-name">{{ e.employee }}</div>
+          <div class="channel-row">
+            <span class="channel-tag tag-{{ e.source|lower|replace(' ','-') }}">{{ e.source }}</span>
+            {% if e.is_trip %}
+              <span class="trip-tag" title="Expense incurred on out-of-town business trip">✈ Trip</span>
+            {% endif %}
+          </div>
+        </td>
+
+        <td>
+          <div class="merchant-name">{{ e.merchant or 'Unknown Merchant' }}</div>
+          <div class="table-sub">{{ e.category }} · {{ e.city or 'Other' }}</div>
+        </td>
+
+        <td>
+          <div class="amount-primary">₹{{ "{:,.2f}".format(e.amount_inr or 0) }}</div>
+          {% if e.currency and e.currency != 'INR' %}
+            <div class="table-sub">{{ e.currency }} {{ "{:,.2f}".format(e.amount or 0) }}</div>
+          {% endif %}
+        </td>
+
+        <td>
+          <div class="amount-reimb {% if e.reimbursable < e.amount_inr and e.reimbursable > 0 %}capped{% elif e.reimbursable == 0 %}zero{% endif %}">
+            ₹{{ "{:,.2f}".format(e.reimbursable or 0) }}
+          </div>
+          {% if e.reimbursable < e.amount_inr and e.reimbursable > 0 %}
+            <span class="capped-badge">Capped</span>
+          {% elif e.non_reimbursable_deduction > 0 %}
+            <span class="deducted-badge">-₹{{ "{:,.0f}".format(e.non_reimbursable_deduction) }} alcohol</span>
+          {% endif %}
+        </td>
+
+        <td>
+          {% if 'Discrepancy' in (e.math_status or '') %}
+            <span class="math-badge discrepancy" title="{{ e.math_status }}">⚠️ Math Error</span>
+          {% elif 'Verified' in (e.math_status or '') %}
+            <span class="math-badge verified" title="Items + Taxes + Tip = Total">✓ Verified</span>
+          {% else %}
+            <span class="math-badge single" title="Single total extracted">Single Total</span>
+          {% endif %}
+        </td>
+
+        <td>
+          <div class="risk-meter-wrap">
+            <span class="risk-score-num {% if e.risk_score >= 60 %}risk-high{% elif e.risk_score >= 25 %}risk-mid{% else %}risk-low{% endif %}">
+              {{ e.risk_score }}
+            </span>
+            <div class="risk-bar-track">
+              <div class="risk-bar-fill {% if e.risk_score >= 60 %}fill-high{% elif e.risk_score >= 25 %}fill-mid{% else %}fill-low{% endif %}" style="width: {{ e.risk_score }}%;"></div>
+            </div>
+          </div>
+        </td>
+
+        <td>
+          <span class="status-pill status-{{ e.status|lower|replace(' ', '-')|replace('_', '-') }}">
+            {{ e.status|replace('_', ' ') }}
+          </span>
+        </td>
+
+        <td class="action-cell">
+          <a class="btn-inspect" href="{{ url_for('expense_detail', expense_id=e.id) }}">
+            Inspect →
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if not expenses %}
+    <div class="empty-state">
+      <div class="empty-icon">📂</div>
+      <h3>No expenses recorded in the audit database</h3>
+      <p>Click "Reload 1-Month Dataset" above or upload your own receipt to begin.</p>
+    </div>
+  {% endif %}
+</div>
+
+<!-- Bottom Section: Layered Checks & Business Trips -->
+<section class="bottom-intel-grid">
+  <div class="intel-card">
+    <div class="card-eyebrow">AUTONOMOUS AUDIT CHECKS</div>
+    <h3 class="card-title">10 Layered Policy & Fraud Checks</h3>
+    <div class="check-matrix">
+      <div class="check-item"><span class="check-dot green"></span><strong>Category Caps:</strong> Meals (Trip vs Local), Flights, Hotels, Supplies</div>
+      <div class="check-item"><span class="check-dot green"></span><strong>City Travel Per-Diems:</strong> Running daily spend across multi-receipts</div>
+      <div class="check-item"><span class="check-dot green"></span><strong>Non-Reimbursable Split:</strong> Auto-deducts alcohol, mini-bar, tobacco</div>
+      <div class="check-item"><span class="check-dot green"></span><strong>Math Verification:</strong> Subtotal + Tax + Tip vs Grand Total discrepancy</div>
+      <div class="check-item"><span class="check-dot amber"></span><strong>Perceptual Duplicate (dHash):</strong> Catches re-photographed & cropped images</div>
+      <div class="check-item"><span class="check-dot amber"></span><strong>Exact Duplicate (SHA-256):</strong> Catches duplicate cross-channel files</div>
+      <div class="check-item"><span class="check-dot red"></span><strong>Collusion Detection:</strong> Cross-employee duplicate claims</div>
+      <div class="check-item"><span class="check-dot red"></span><strong>Smurfing / Split Detection:</strong> Multiple bills just below client cap</div>
+      <div class="check-item"><span class="check-dot blue"></span><strong>Trip Auto-Detection:</strong> Out-of-town hotel/travel clusters</div>
+      <div class="check-item"><span class="check-dot blue"></span><strong>Approval Escalation:</strong> Multi-tier threshold routing (> ₹10k)</div>
+    </div>
+  </div>
+
+  <div class="intel-card accent-card">
+    <div class="card-eyebrow">BUSINESS TRIP RECONSTRUCTION</div>
+    <h3 class="card-title">Detected Trips in Dataset ({{ trips|length }})</h3>
+    <p class="card-desc">
+      The system automatically clusters employee receipts into business trips to apply travel per-diems rather than local office caps.
+    </p>
+    <div class="trips-mini-list">
+      {% for t in trips[:4] %}
+      <div class="trip-mini-item">
+        <div>
+          <strong>{{ t.employee }}</strong> · <span class="trip-city">{{ t.city }}</span>
+          <div class="trip-dates">{{ t.start_date }} to {{ t.end_date }} ({{ t.claims_count }} claims)</div>
+        </div>
+        <div class="trip-cost">
+          <strong>₹{{ "{:,.0f}".format(t.total_claimed) }}</strong>
+          <span class="trip-status-tag {{ t.status|lower }}">{{ t.status }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <a href="{{ url_for('analytics') }}" class="view-all-link">View complete trips breakdown & analytics ↗</a>
+  </div>
+</section>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const searchBox = document.getElementById('searchBox');
+  const pills = document.querySelectorAll('#statusFilterPills .pill');
+  const rows = document.querySelectorAll('#expenseTable tbody tr');
+  const countBadge = document.getElementById('visibleCount');
+
+  let activeStatus = '';
+  let activeRisk = '';
+
+  function filterTable() {
+    const query = searchBox.value.trim().toLowerCase();
+    let visible = 0;
+
+    rows.forEach(row => {
+      const rowSearch = row.dataset.search || '';
+      const rowStatus = row.dataset.status || '';
+      const rowRisk = parseInt(row.dataset.risk || '0', 10);
+
+      const matchesSearch = !query || rowSearch.includes(query);
+      let matchesStatus = true;
+      if (activeStatus) {
+        const allowed = activeStatus.split(',').map(s => s.trim().toLowerCase());
+        matchesStatus = allowed.includes(rowStatus.toLowerCase());
+      }
+      if (activeRisk === 'high') {
+        matchesStatus = matchesStatus && (rowRisk >= 50);
+      }
+
+      if (matchesSearch && matchesStatus) {
+        row.style.display = '';
+        visible++;
+      } else {
+        row.style.display = 'none';
+      }
+    });
+
+    if (countBadge) countBadge.textContent = visible;
+  }
+
+  searchBox.addEventListener('input', filterTable);
+
+  pills.forEach(pill => {
+    pill.addEventListener('click', () => {
+      pills.forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      activeStatus = pill.dataset.status || '';
+      activeRisk = pill.dataset.risk || '';
+      filterTable();
+    });
+  });
+});
+</script>
+{% endblock %}

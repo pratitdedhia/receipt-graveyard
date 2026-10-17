@@ -1,0 +1,1125 @@
+{% extends "base.html" %}
+{% block title %}Audit Record #{{ expense.id }} · {{ expense.merchant }} · Receipt Graveyard{% endblock %}
+
+{% block content %}
+<div class="breadcrumb-bar">
+  <a class="back-link" href="{{ url_for('dashboard') }}">← Back to Command Center</a>
+  <div class="audit-badge-right">
+    <a href="{{ url_for('expense_voucher', expense_id=expense.id) }}" target="_blank" class="btn btn-sm btn-secondary">
+      🖨 Printable Audit Slip / Voucher ↗
+    </a>
+  </div>
+</div>
+
+<!-- Header Section -->
+<div class="detail-header-card">
+  <div class="detail-header-main">
+    <div class="record-meta-row">
+      <span class="id-tag-lg">CLAIM #{{ expense.id }}</span>
+      {% if expense.is_trip %}
+        <span class="trip-tag">✈ Business Trip</span>
+      {% else %}
+        <span class="home-tag">🏠 Local Office Context</span>
+      {% endif %}
+    </div>
+    <h1 class="merchant-title">{{ expense.merchant or 'Unknown Merchant' }}</h1>
+    <div class="employee-meta">
+      <strong>{{ expense.employee }}</strong> 
+      <span class="office-pill-sm">📍 Mapped: {{ expense.home_office_name or 'Mumbai HQ' }} ({{ expense.home_office_city or 'Mumbai' }})</span> · 
+      {{ expense.expense_date or 'Date missing' }} · Expense City: <strong>{{ expense.city or 'City unspecified' }}</strong> · {{ expense.category }}
+    </div>
+  </div>
+
+  <div class="detail-header-status">
+    <div class="status-pill status-{{ expense.status|lower|replace(' ','-') }} status-lg">
+      {{ expense.status }}
+    </div>
+    <div class="risk-gauge-box">
+      <div class="risk-gauge-score {% if expense.risk_score >= 60 %}risk-high{% elif expense.risk_score >= 25 %}risk-mid{% else %}risk-low{% endif %}">
+        {{ expense.risk_score }}<small>/100</small>
+      </div>
+      <div class="risk-gauge-label">RISK SCORE</div>
+    </div>
+  </div>
+</div>
+
+<!-- Main Audit Grid -->
+<div class="audit-workspace-grid">
+  <!-- Left Column: Financials, Explainable Decision, Line Items, Actions -->
+  <section class="audit-left-col">
+    <!-- Financial Comparison Panel -->
+    <div class="financials-trio-panel">
+      <div class="fin-box">
+        <span class="fin-label">CLAIMED AMOUNT (GROSS)</span>
+        <div class="fin-val">₹{{ "{:,.2f}".format(expense.amount_inr or 0) }}</div>
+        {% if expense.currency and expense.currency != 'INR' %}
+          <div class="fin-sub">{{ expense.currency }} {{ "{:,.2f}".format(expense.amount or 0) }} (Rate: {{ policy.currency_rates_to_inr.get(expense.currency, 1) }} INR)</div>
+        {% else %}
+          <div class="fin-sub">Entered / Extracted from bill</div>
+        {% endif %}
+      </div>
+
+      <div class="fin-box highlight-reimb">
+        <span class="fin-label">SUGGESTED REIMBURSEMENT</span>
+        <div class="fin-val color-green">₹{{ "{:,.2f}".format(expense.reimbursable or 0) }}</div>
+        {% if expense.reimbursable < expense.amount_inr and expense.reimbursable > 0 %}
+          <div class="fin-sub color-amber">Capped by policy limits</div>
+        {% elif expense.reimbursable == 0 and expense.amount_inr > 0 %}
+          <div class="fin-sub color-red">Non-reimbursable (₹0.00)</div>
+        {% else %}
+          <div class="fin-sub color-green">100% allowable under policy</div>
+        {% endif %}
+      </div>
+
+      <div class="fin-box">
+        <span class="fin-label">NON-REIMBURSABLE / DEDUCTED</span>
+        <div class="fin-val color-red">₹{{ "{:,.2f}".format(max(0, expense.amount_inr - expense.reimbursable)) }}</div>
+        {% if expense.non_reimbursable_deduction > 0 %}
+          <div class="fin-sub">Includes ₹{{ "{:,.2f}".format(expense.non_reimbursable_deduction) }} alcohol/items</div>
+        {% else %}
+          <div class="fin-sub">Cap overrun / duplicate</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Explainable Audit Findings -->
+    <div class="panel-box">
+      <div class="panel-head-row">
+        <div>
+          <span class="card-eyebrow">EXPLAINABLE AI AUDIT FINDINGS</span>
+          <h2 class="panel-title">Why this decision was reached?</h2>
+        </div>
+        {% if suspicion_types %}
+          <div class="suspicion-badges">
+            {% for st in suspicion_types %}
+              <span class="suspicion-badge">{{ st }}</span>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+
+      <p class="explanation-box">{{ expense.explanation }}</p>
+
+      {% if flags %}
+        <div class="flags-stack">
+          {% for flag in flags %}
+            <div class="flag-row">
+              <span class="flag-icon">!</span>
+              <span class="flag-text">{{ flag }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="clean-audit-banner">
+          <span class="check-icon">✓</span>
+          <span>Fully compliant with category caps, city per-diems, and documentation guidelines.</span>
+        </div>
+      {% endif %}
+
+      {% if dup_row %}
+        <div class="duplicate-callout">
+          <strong>⚠️ Matched Duplicate Record:</strong>
+          <span>This receipt matches Claim <a href="{{ url_for('expense_detail', expense_id=dup_row.id) }}">#{{ dup_row.id }}</a> submitted by <strong>{{ dup_row.employee }}</strong> on {{ dup_row.expense_date }} via {{ dup_row.source }}.</span>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Math Reconciliation Card -->
+    <div class="panel-box">
+      <div class="panel-head-row">
+        <div>
+          <span class="card-eyebrow">MATH INTEGRITY & RECONCILIATION</span>
+          <h3 class="panel-title">Does the receipt math add up?</h3>
+        </div>
+        <div>
+          {% if 'Discrepancy' in (expense.math_status or '') %}
+            <span class="math-badge discrepancy">⚠️ Discrepancy Detected</span>
+          {% elif 'Verified' in (expense.math_status or '') %}
+            <span class="math-badge verified">✓ Math Verified</span>
+          {% else %}
+            <span class="math-badge single">Single Total Found</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="math-formula-box">
+        <div class="math-step">
+          <span class="math-step-label">Subtotal</span>
+          <strong>₹{{ "{:,.2f}".format(expense.subtotal or expense.extracted_amount or expense.amount_inr) }}</strong>
+        </div>
+        <span class="math-op">+</span>
+        <div class="math-step">
+          <span class="math-step-label">Taxes / GST</span>
+          <strong>₹{{ "{:,.2f}".format(expense.tax_amount or 0) }}</strong>
+        </div>
+        <span class="math-op">+</span>
+        <div class="math-step">
+          <span class="math-step-label">Tip / Gratuity</span>
+          <strong>₹{{ "{:,.2f}".format(expense.tip_amount or 0) }}</strong>
+        </div>
+        <span class="math-op">=</span>
+        <div class="math-step highlight-step">
+          <span class="math-step-label">Calculated Total</span>
+          <strong>₹{{ "{:,.2f}".format((expense.subtotal or expense.extracted_amount or expense.amount_inr) + (expense.tax_amount or 0) + (expense.tip_amount or 0)) }}</strong>
+        </div>
+        <span class="math-op">vs</span>
+        <div class="math-step stated-step">
+          <span class="math-step-label">Stated Claimed</span>
+          <strong>₹{{ "{:,.2f}".format(expense.amount_inr) }}</strong>
+        </div>
+      </div>
+      <p class="math-status-desc">{{ expense.math_status }}</p>
+    </div>
+
+    <!-- Dual-Proof Payment Verification & Cross-Matching Card -->
+    <div class="panel-box">
+      <div class="panel-head-row">
+        <div>
+          <span class="card-eyebrow">DUAL-PROOF PAYMENT AUDIT</span>
+          <h3 class="panel-title">Bill vs Payment Proof Cross-Match</h3>
+        </div>
+        <div>
+          {% if expense.payment_verified %}
+            <span class="math-badge verified">✓ Payment Match Verified</span>
+          {% elif expense.payment_file %}
+            <span class="math-badge discrepancy">⚠️ Discrepancy / Attention</span>
+          {% else %}
+            <span class="math-badge single">ℹ Single Proof (Bill Only)</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="reconcile-proof-grid">
+        <div class="proof-stat-item">
+          <span class="proof-label">PAYMENT METHOD</span>
+          <strong>{{ expense.payment_method or 'UPI / Digital Payment' }}</strong>
+        </div>
+        <div class="proof-stat-item">
+          <span class="proof-label">TRANSACTION REF / UTR</span>
+          <strong class="font-mono">{{ expense.transaction_ref or 'Pending Capture' }}</strong>
+        </div>
+        <div class="proof-stat-item">
+          <span class="proof-label">BILL GRAND TOTAL</span>
+          <strong class="font-mono">₹{{ "{:,.2f}".format(expense.amount_inr or 0) }}</strong>
+        </div>
+        <div class="proof-stat-item">
+          <span class="proof-label">PAYMENT PROOF ATTACHED</span>
+          <strong class="{% if expense.payment_file %}color-green{% else %}color-amber{% endif %}">
+            {% if expense.payment_file %}Attached ({{ expense.payment_file }}){% else %}None (Single Proof){% endif %}
+          </strong>
+        </div>
+      </div>
+
+      <div class="payment-match-note-box {% if expense.payment_verified %}note-verified{% elif expense.payment_file %}note-discrepancy{% else %}note-info{% endif %}">
+        <div class="match-note-title">AI Reconciliation Summary:</div>
+        <p>{{ expense.payment_match_note or 'Claim submitted with bill invoice. Adding a payment screenshot (Google Pay, PhonePe, Paytm, or Card slip) enables automated dual-proof verification.' }}</p>
+      </div>
+    </div>
+
+    <!-- Itemized Line Items (with Alcohol/Personal Deduction Flags) -->
+    {% if line_items %}
+    <div class="panel-box">
+      <div class="panel-head-row">
+        <div>
+          <span class="card-eyebrow">ITEMIZED LINE-ITEM AUDIT</span>
+          <h3 class="panel-title">Extracted Bill Items ({{ line_items|length }})</h3>
+        </div>
+        {% if expense.non_reimbursable_deduction > 0 %}
+          <span class="deducted-badge">Deducted: ₹{{ "{:,.2f}".format(expense.non_reimbursable_deduction) }}</span>
+        {% endif %}
+      </div>
+
+      <div class="table-wrap-compact">
+        <table class="compact-table">
+          <thead>
+            <tr>
+              <th>ITEM DESCRIPTION</th>
+              <th>PRICE</th>
+              <th>AUDIT VERDICT</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in line_items %}
+            <tr class="{% if item.disallowed %}row-disallowed{% endif %}">
+              <td>
+                <strong>{{ item.name }}</strong>
+                {% if item.reason %}
+                  <div class="table-sub color-red">{{ item.reason }} policy prohibition</div>
+                {% endif %}
+              </td>
+              <td class="font-mono">₹{{ "{:,.2f}".format(item.price) }}</td>
+              <td>
+                {% if item.disallowed %}
+                  <span class="item-tag tag-deducted">✕ Disallowed (-₹{{ "{:,.2f}".format(item.price) }})</span>
+                {% else %}
+                  <span class="item-tag tag-allowable">✓ Reimbursable</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- OCR Extraction Provenance & Human-in-the-Loop Correction -->
+    <div class="panel-box">
+      <div class="panel-head-row">
+        <div>
+          <span class="card-eyebrow">HIGH-ACCURACY OCR & HUMAN-IN-THE-LOOP PROVENANCE</span>
+          <h3 class="panel-title">Extracted Financial Fields & Provenance</h3>
+        </div>
+        <div>
+          {% if current_user and current_user.role in ('admin', 'accounts') %}
+            <button type="button" class="btn btn-sm btn-accent" onclick="openFieldCorrectionModal()">
+              ✏️ Correct Extracted Field
+            </button>
+          {% endif %}
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 14px 0;">
+        <div style="background: #f8faf9; padding: 10px 14px; border-radius: 6px; border: 1px solid var(--border-card);">
+          <span style="font-size: 11px; color: var(--ink-muted); text-transform: uppercase;">Extracted Merchant</span>
+          <div style="font-weight: 700; color: var(--ink-900);">{{ expense.merchant or '—' }}</div>
+        </div>
+        <div style="background: #f8faf9; padding: 10px 14px; border-radius: 6px; border: 1px solid var(--border-card);">
+          <span style="font-size: 11px; color: var(--ink-muted); text-transform: uppercase;">Extracted Date</span>
+          <div style="font-weight: 700; font-family: var(--font-mono);">{{ expense.expense_date or '—' }}</div>
+        </div>
+        <div style="background: #f8faf9; padding: 10px 14px; border-radius: 6px; border: 1px solid var(--border-card);">
+          <span style="font-size: 11px; color: var(--ink-muted); text-transform: uppercase;">Total (Printed)</span>
+          <div style="font-weight: 700; color: var(--green-700); font-family: var(--font-mono);">₹{{ "{:,.2f}".format(expense.amount_inr or 0) }}</div>
+        </div>
+        <div style="background: #f8faf9; padding: 10px 14px; border-radius: 6px; border: 1px solid var(--border-card);">
+          <span style="font-size: 11px; color: var(--ink-muted); text-transform: uppercase;">Math Status</span>
+          <div style="font-weight: 700;">
+            {% if expense.math_status == 'Verified' %}
+              <span style="color: var(--green-600);">✓ Verified</span>
+            {% elif expense.math_status == 'Discrepancy' %}
+              <span style="color: var(--red-600);">✕ Discrepancy</span>
+            {% else %}
+              <span style="color: var(--ink-muted);">{{ expense.math_status or 'N/A' }}</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      {% if field_corrections %}
+      <div style="margin-top: 14px;">
+        <h4 style="font-size: 12px; font-weight: 700; color: var(--ink-700); text-transform: uppercase; margin-bottom: 8px;">
+          Correction History (Immutable OCR Provenance):
+        </h4>
+        <div class="table-container">
+          <table class="data-table" style="font-size: 12px;">
+            <thead>
+              <tr>
+                <th>FIELD</th>
+                <th>ORIGINAL OCR</th>
+                <th>CORRECTED VALUE</th>
+                <th>CORRECTED BY</th>
+                <th>TIMESTAMP</th>
+                <th>REASON</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for fc in field_corrections %}
+              <tr>
+                <td><strong>{{ fc.field_name }}</strong></td>
+                <td><code style="color: var(--red-600);">{{ fc.original_ocr_value or 'None' }}</code></td>
+                <td><code style="color: var(--green-600); font-weight: 700;">{{ fc.corrected_value }}</code></td>
+                <td>{{ fc.corrected_by }}</td>
+                <td><span class="table-mono">{{ fc.corrected_at }}</span></td>
+                <td>{{ fc.reason }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if expense.ocr_raw_text %}
+      <details style="margin-top: 12px; font-size: 12px; background: #fafafa; padding: 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
+        <summary style="cursor: pointer; font-weight: 600; color: var(--ink-700);">
+          🔍 View Raw OCR Extracted Text Stream
+        </summary>
+        <pre style="margin-top: 8px; font-family: var(--font-mono); font-size: 11px; white-space: pre-wrap; color: #334155; max-height: 160px; overflow-y: auto; background: #fff; padding: 8px; border-radius: 4px; border: 1px solid #cbd5e1;">{{ expense.ocr_raw_text }}</pre>
+      </details>
+      {% endif %}
+    </div>
+
+    <!-- Project Governance & Reimbursement Cap Banner -->
+    <div class="panel-box project-governance-card">
+      <div class="panel-head-row">
+        <div>
+          <span class="card-eyebrow">PROJECT GOVERNANCE & REIMBURSEMENT CAP</span>
+          <h3 class="panel-title font-mono">{{ expense.project_code or 'PRJ-GENERAL' }} · {{ project.name if project else 'General Corporate Projects' }}</h3>
+        </div>
+        <div>
+          {% if is_editing_open %}
+            <span class="badge-editing-active" title="Employee can edit description or attach extra proofs">⏱ Editing Window Active (until {{ expense.editing_deadline }})</span>
+          {% else %}
+            <span class="badge-editing-closed" title="Editing period has elapsed">🔒 Editing Window Closed</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="project-cap-metrics">
+        <div class="cap-metric-item">
+          <span class="cap-metric-label">PER-PERSON AUTO-CAP</span>
+          <strong class="font-mono">₹{{ "{:,.2f}".format(project.auto_approval_cap if (project and project.auto_approval_cap) else 5000) }}</strong>
+        </div>
+        <div class="cap-metric-item">
+          <span class="cap-metric-label">CLAIMED AMOUNT</span>
+          <strong class="font-mono">₹{{ "{:,.2f}".format(expense.amount_inr or 0) }}</strong>
+        </div>
+        <div class="cap-metric-item">
+          <span class="cap-metric-label">DIFF FROM CAP</span>
+          <strong class="font-mono {% if expense.difference_from_cap and expense.difference_from_cap > 0 %}color-amber{% else %}color-green{% endif %}">
+            {% if expense.difference_from_cap and expense.difference_from_cap > 0 %}
+              +₹{{ "{:,.2f}".format(expense.difference_from_cap) }} (Over Cap)
+            {% else %}
+              -₹{{ "{:,.2f}".format((expense.difference_from_cap or 0)|abs) }} (Within Cap)
+            {% endif %}
+          </strong>
+        </div>
+        <div class="cap-metric-item">
+          <span class="cap-metric-label">ACTIVE POLICY</span>
+          <strong class="font-mono">{{ expense.policy_version or 'v2026.1' }}</strong>
+        </div>
+      </div>
+    </div>
+
+    <!-- EMPLOYEE ACTION: Resubmit Claim with Requested Documents -->
+    {% if can_resubmit %}
+    <div class="panel-box resubmission-alert-box">
+      <div class="resub-head">
+        <span class="alert-icon-big">⚠️</span>
+        <div>
+          <h3 style="color:#f59e0b; margin:0 0 4px 0;">Accounts Action Required: Additional Documents Requested</h3>
+          <p style="margin:0; font-size:0.88rem; color:#cbd5e1;">
+            Accounts has reviewed your claim and requested clarification before approval can proceed.
+          </p>
+        </div>
+      </div>
+
+      <div class="resub-details-callout">
+        <div style="margin-bottom:6px;"><strong>Reviewer Reason:</strong> {{ expense.review_reason or 'Additional documentation needed to verify expenses.' }}</div>
+        <div><strong>Requested Proofs:</strong> <span class="highlight-text">{{ expense.requested_documents or 'Itemized receipt, client confirmation or payment proof' }}</span></div>
+      </div>
+
+      <form method="post" action="{{ url_for('expense_resubmit', expense_id=expense.id) }}" enctype="multipart/form-data" class="resubmit-form">
+        <div class="form-group" style="margin-bottom:14px;">
+          <label><strong>Upload Additional Supporting Document / Proof *</strong></label>
+          <input type="file" name="document" required class="form-input" accept=".png,.jpg,.jpeg,.webp,.pdf">
+          <small class="text-muted">Attach the requested receipt, invoice, email approval or attendee list (PNG, JPG, PDF).</small>
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px;">
+          <label><strong>Explanation / Clarification Notes *</strong></label>
+          <textarea name="resubmission_note" rows="3" required placeholder="Provide your explanation and context for Accounts..." class="form-input"></textarea>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="background:#0f766e; border-color:#14b8a6;">
+          📤 Resubmit Claim to Accounts Queue →
+        </button>
+      </form>
+    </div>
+    {% endif %}
+
+    <!-- EMPLOYEE ACTION: Edit Claim during active editing window -->
+    {% if can_edit and not can_resubmit and is_editing_open %}
+    <div class="panel-box">
+      <details class="edit-claim-drawer">
+        <summary><strong>✏️ Edit Claim Details</strong> <span class="badge-count">Editing Window Active</span></summary>
+        <form method="post" action="{{ url_for('expense_edit', expense_id=expense.id) }}" style="margin-top:14px;">
+          <div class="input-row-2">
+            <div class="form-group">
+              <label>Project Code</label>
+              <input type="text" name="project_code" value="{{ expense.project_code }}" class="form-input font-mono">
+            </div>
+            <div class="form-group">
+              <label>Client Name</label>
+              <input type="text" name="client_name" value="{{ expense.client_name or '' }}" class="form-input">
+            </div>
+          </div>
+          <div class="form-group" style="margin-top:10px;">
+            <label>Business Purpose / Notes</label>
+            <textarea name="description" rows="2" class="form-input">{{ expense.description or '' }}</textarea>
+          </div>
+          <button type="submit" class="btn btn-sm btn-secondary" style="margin-top:10px;">
+            💾 Save Edits
+          </button>
+        </form>
+      </details>
+    </div>
+    {% endif %}
+
+    <!-- Finance Reviewer Decision Hub (Accounts & Admin) -->
+    <div class="panel-box decision-hub-card">
+      <span class="card-eyebrow">FINANCE DECISION & WORKFLOW HUB</span>
+      <h3 class="panel-title">Claim Status: {{ expense.status|replace('_', ' ') }}</h3>
+      <p class="small-sub">Actions update this claim record, create an immutable version snapshot, and notify the employee.</p>
+
+      {% if current_user and current_user.role == 'employee' %}
+        <div class="employee-restricted-notice">
+          <span class="notice-icon">🔒</span>
+          <div>
+            <strong>Employee Ledger View</strong>
+            <p>Your claim is currently in <strong>{{ expense.status|replace('_', ' ') }}</strong> status. Financial approval decisions and reimbursement disbursements are handled by Accounts Reviewers and Admins.</p>
+          </div>
+        </div>
+      {% else %}
+        <!-- Internal Review Notes Form -->
+        <form method="post" action="{{ url_for('expense_action', expense_id=expense.id) }}" class="internal-notes-form" style="margin-bottom:18px;">
+          <input type="hidden" name="action" value="internal_note">
+          <label style="font-size:0.8rem; font-weight:700; color:#94a3b8; text-transform:uppercase;">🔒 Internal Reviewer Notes <small>(Visible to Accounts & Admin only)</small></label>
+          <div style="display:flex; gap:10px; margin-top:6px;">
+            <input type="text" name="internal_notes" value="{{ expense.internal_review_notes or '' }}" placeholder="Add private audit notes..." class="form-input">
+            <button type="submit" class="btn btn-sm btn-secondary" style="white-space:nowrap;">Save Note</button>
+          </div>
+        </form>
+
+        <div class="decision-button-grid">
+          <!-- 1. Approve Claim -->
+          {% if expense.status not in ('APPROVED', 'Approved', 'REIMBURSEMENT_PENDING', 'REIMBURSED') %}
+          <form method="post" action="{{ url_for('expense_action', expense_id=expense.id) }}" style="display:inline;">
+            <input type="hidden" name="action" value="approve">
+            <button type="submit" class="btn btn-decision-approve">
+              ✓ Approve (₹{{ "{:,.2f}".format(expense.reimbursable or 0) }})
+            </button>
+          </form>
+          {% endif %}
+
+          <!-- 2. Request Additional Info / Documents -->
+          {% if expense.status not in ('REIMBURSED', 'REJECTED') %}
+          <button type="button" class="btn btn-decision-info" onclick="openRequestInfoModal()">
+            ↻ Request Info / Documents
+          </button>
+          {% endif %}
+
+          <!-- 3. Reject Claim -->
+          {% if expense.status not in ('REIMBURSED', 'REJECTED') %}
+          <button type="button" class="btn btn-decision-reject" onclick="openRejectModal()">
+            ✕ Reject Claim
+          </button>
+          {% endif %}
+
+          <!-- 4. Queue for Reimbursement -->
+          {% if expense.status in ('APPROVED', 'Approved', 'AUTO_APPROVED') %}
+          <form method="post" action="{{ url_for('expense_action', expense_id=expense.id) }}" style="display:inline;">
+            <input type="hidden" name="action" value="queue_reimbursement">
+            <button type="submit" class="btn btn-decision-reimb" style="background:#0284c7; border-color:#38bdf8; color:#fff;">
+              💳 Queue for Reimbursement Payout →
+            </button>
+          </form>
+          {% endif %}
+
+          <!-- 5. Record Completed Reimbursement Payment -->
+          {% if expense.status in ('REIMBURSEMENT_PENDING', 'APPROVED', 'Approved', 'AUTO_APPROVED') %}
+          <button type="button" class="btn btn-primary" onclick="openRecordPaymentModal()" style="background:#16a34a; border-color:#22c55e;">
+            💰 Record Completed Payment
+          </button>
+          {% endif %}
+        </div>
+
+        {% if expense.status == 'REIMBURSED' %}
+        <div class="reimbursed-success-banner" style="margin-top:14px; padding:14px; background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.3); border-radius:8px;">
+          <div style="font-weight:700; color:#4ade80;">✓ Payout Completed & Disbursed</div>
+          <div style="font-size:0.85rem; color:#cbd5e1; margin-top:4px;">
+            Reimbursed on <strong>{{ expense.reimbursed_at }}</strong> by <strong>{{ expense.reimbursed_by }}</strong> via <strong>{{ expense.reimbursement_method }}</strong> (Tx Ref: <code class="font-mono">{{ expense.reimbursement_tx_ref }}</code>).
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Manager Exception Override Section -->
+        <div class="override-drawer" style="margin-top:16px;">
+          <details>
+            <summary><strong>Manager Exception Override</strong> (Approve custom amount or bypass cap)</summary>
+            <form method="post" action="{{ url_for('expense_action', expense_id=expense.id) }}" class="override-form">
+              <input type="hidden" name="action" value="approve">
+              <div class="input-row-2" style="margin-top: 12px;">
+                <div class="form-group">
+                  <label>Custom Approved Amount (INR) *</label>
+                  <input type="number" step="0.01" name="override_amount" value="{{ expense.reimbursable }}" required class="form-input font-mono">
+                </div>
+                <div class="form-group">
+                  <label>Manager Business Justification *</label>
+                  <input type="text" name="comment" placeholder="e.g. VP pre-approved client dinner overrun" required class="form-input">
+                </div>
+              </div>
+              <button type="submit" class="btn btn-sm btn-accent" style="margin-top: 10px;">
+                Apply Manager Override & Approve
+              </button>
+            </form>
+          </details>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Supporting Documents Timeline -->
+    <div class="panel-box">
+      <div class="panel-head-row">
+        <div>
+          <span class="card-eyebrow">DOCUMENT PROOFS & REVISION HISTORY</span>
+          <h3 class="panel-title">Attached Supporting Documents ({{ supporting_docs|length }})</h3>
+        </div>
+      </div>
+      <div class="table-container" style="margin-top:10px;">
+        <table class="data-table" style="font-size:0.85rem;">
+          <thead>
+            <tr>
+              <th>REV</th>
+              <th>DOCUMENT CATEGORY</th>
+              <th>ORIGINAL FILENAME</th>
+              <th>UPLOADED AT</th>
+              <th>VIEW</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for doc in supporting_docs %}
+            <tr>
+              <td><span class="id-badge">r{{ doc.revision }}</span></td>
+              <td><strong>{{ doc.document_category }}</strong></td>
+              <td class="font-mono">{{ doc.original_filename or doc.filename }}</td>
+              <td>{{ doc.upload_timestamp }}</td>
+              <td>
+                <a href="{{ url_for('uploaded_file', filename=doc.filename) }}" target="_blank" class="btn-inspect" style="padding:3px 8px; font-size:0.75rem;">
+                  View Proof ↗
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+            {% if not supporting_docs %}
+            <tr>
+              <td colspan="5" style="text-align:center; color:#94a3b8; padding:16px;">
+                No separate supporting documents recorded.
+              </td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Immutable Claim Versions Snapshot -->
+    {% if versions %}
+    <div class="panel-box">
+      <span class="card-eyebrow">IMMUTABLE CLAIM SNAPSHOTS</span>
+      <h3 class="panel-title">Claim Versions & Change History ({{ versions|length }})</h3>
+      <div class="audit-timeline" style="margin-top:12px;">
+        {% for v in versions %}
+        <div class="timeline-entry">
+          <div class="timeline-dot" style="background:#0284c7;"></div>
+          <div class="timeline-content">
+            <div class="timeline-head">
+              <strong>Version {{ v.version_num }} · {{ v.status }}</strong>
+              <span class="timeline-time">{{ v.created_at }}</span>
+            </div>
+            <div class="timeline-sub">Changed by: {{ v.changed_by }} · Claimed: ₹{{ "{:,.2f}".format(v.amount_inr or 0) }} · Reimbursable: ₹{{ "{:,.2f}".format(v.reimbursable or 0) }}</div>
+            {% if v.change_reason %}
+              <div class="timeline-note">{{ v.change_reason }}</div>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Audit Log History -->
+    {% if audit_log %}
+    <div class="panel-box">
+      <span class="card-eyebrow">AUDIT TRAIL LOG</span>
+      <h3 class="panel-title">Lifecycle & Decision History</h3>
+      <div class="audit-timeline">
+        {% for log in audit_log %}
+        <div class="timeline-entry">
+          <div class="timeline-dot"></div>
+          <div class="timeline-content">
+            <div class="timeline-head">
+              <strong>{{ log.action }}</strong>
+              <span class="timeline-time">{{ log.timestamp }}</span>
+            </div>
+            <div class="timeline-sub">Actor: {{ log.actor }} · Status: {{ log.status }}</div>
+            {% if log.note %}
+              <div class="timeline-note">{{ log.note }}</div>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </section>
+
+  <!-- Right Column: Dual Evidence Inspector, Metadata, Policy Reference -->
+  <aside class="audit-right-col">
+    <!-- Interactive Dual Evidence Inspector -->
+    <div class="panel-box receipt-inspector-card">
+      <div class="inspector-head">
+        <div>
+          <span class="card-eyebrow">DUAL EVIDENCE INSPECTOR</span>
+          <h3 class="panel-title">Visual Document Proofs</h3>
+        </div>
+      </div>
+
+      <!-- Evidence Selector Tabs -->
+      <div class="evidence-selector-tabs">
+        <button class="evidence-tab-btn active" id="tabBillBtn" onclick="switchEvidenceTab('bill')">
+          🧾 Bill / Invoice {% if not expense.file_name %}(None){% endif %}
+        </button>
+        <button class="evidence-tab-btn {% if not expense.file_name and expense.payment_file %}active{% endif %}" id="tabPayBtn" onclick="switchEvidenceTab('pay')">
+          📱 Payment Proof {% if not expense.payment_file %}(None){% endif %}
+        </button>
+        {% if expense.file_name and expense.payment_file %}
+          <button class="evidence-tab-btn" id="tabBothBtn" onclick="switchEvidenceTab('both')">
+            ⚡ Side-by-Side
+          </button>
+        {% endif %}
+      </div>
+
+      <div class="inspector-controls">
+        <button class="ctrl-btn-sm" onclick="zoomReceipt(1.2)" title="Zoom in">🔍＋ Zoom</button>
+        <button class="ctrl-btn-sm" onclick="zoomReceipt(0.8)" title="Zoom out">🔍－</button>
+        <button class="ctrl-btn-sm" onclick="rotateReceipt(90)" title="Rotate 90 degrees">↻ Rotate</button>
+        <button class="ctrl-btn-sm" id="thermalToggleBtn" onclick="toggleInspectorThermal()" title="Enhance faded thermal printouts">🖨 Faded Ink Booster</button>
+      </div>
+
+      <!-- Proof 1: Bill Viewport -->
+      <div class="receipt-viewport" id="billViewport">
+        {% if expense.file_name %}
+          {% if expense.file_name.lower().endswith('.pdf') %}
+            <div class="pdf-card-preview">
+              <span class="pdf-big-icon">📄</span>
+              <strong>{{ expense.file_name }}</strong>
+              <p>Native PDF invoice stored in uploads.</p>
+              <a href="{{ url_for('uploaded_file', filename=expense.file_name) }}" target="_blank" class="btn btn-sm btn-secondary">
+                Open Full PDF In New Tab ↗
+              </a>
+            </div>
+          {% else %}
+            <img 
+              id="billImg" 
+              src="{{ url_for('uploaded_file', filename=expense.file_name) }}" 
+              alt="Itemized Bill"
+              class="inspect-receipt-image"
+            >
+          {% endif %}
+        {% else %}
+          <div class="no-file-box">
+            <span class="no-file-icon">🚫</span>
+            <strong>No bill attachment</strong>
+            <p>Expense entered manually without invoice proof.</p>
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- Proof 2: Payment Screenshot Viewport -->
+      <div class="receipt-viewport" id="payViewport" style="display: none;">
+        {% if expense.payment_file %}
+          <img 
+            id="payImg" 
+            src="{{ url_for('uploaded_file', filename=expense.payment_file) }}" 
+            alt="Payment Screenshot"
+            class="inspect-receipt-image"
+          >
+        {% else %}
+          <div class="no-file-box">
+            <span class="no-file-icon">📱</span>
+            <strong>No payment screenshot attached</strong>
+            <p>Attach UPI (GPay/PhonePe/Paytm) or Card slip for payment verification.</p>
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- Dual Side-by-Side Viewport -->
+      {% if expense.file_name and expense.payment_file %}
+      <div class="receipt-dual-viewport" id="bothViewport" style="display: none;">
+        <div class="dual-pane">
+          <span class="dual-pane-label">🧾 Itemized Bill</span>
+          {% if expense.file_name.lower().endswith('.pdf') %}
+            <a href="{{ url_for('uploaded_file', filename=expense.file_name) }}" target="_blank" class="pdf-link-sm">📄 View PDF ↗</a>
+          {% else %}
+            <img src="{{ url_for('uploaded_file', filename=expense.file_name) }}" class="inspect-receipt-image" alt="Bill">
+          {% endif %}
+        </div>
+        <div class="dual-pane">
+          <span class="dual-pane-label">📱 Payment Slip / UPI</span>
+          <img src="{{ url_for('uploaded_file', filename=expense.payment_file) }}" class="inspect-receipt-image" alt="Payment">
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="file-hash-tag">
+        {% if expense.file_name %}
+          <div>Bill SHA-256: <code>{{ expense.file_hash[:16] if expense.file_hash else 'N/A' }}...</code></div>
+          {% if expense.perceptual_hash %}
+            <div>dHash: <code>{{ expense.perceptual_hash }}</code></div>
+          {% endif %}
+        {% endif %}
+        {% if expense.payment_file %}
+          <div>Payment Proof: <code>{{ expense.payment_file }}</code></div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Metadata Attributes -->
+    <div class="panel-box">
+      <span class="card-eyebrow">METADATA & DETAILS</span>
+      <dl class="meta-dl">
+        <dt>Employee</dt>
+        <dd>{{ expense.employee }}</dd>
+
+        <dt>Mapped Home Office</dt>
+        <dd>📍 {{ expense.home_office_name or 'Mumbai HQ' }} ({{ expense.home_office_city or 'Mumbai' }})</dd>
+
+        <dt>Claim Location</dt>
+        <dd>{{ expense.city }}</dd>
+
+        <dt>Trip Context</dt>
+        <dd>{% if expense.is_trip %}✈ Out-of-town Business Trip{% else %}🏠 Local Office Claim{% endif %}</dd>
+
+        <dt>Payment Method</dt>
+        <dd>{{ expense.payment_method or 'UPI' }}</dd>
+
+        <dt>Transaction Ref / UTR</dt>
+        <dd class="font-mono">{{ expense.transaction_ref or 'None' }}</dd>
+
+        <dt>Payment Verification</dt>
+        <dd>
+          {% if expense.payment_verified %}
+            <span class="color-green font-bold">✓ 100% Match with Bill</span>
+          {% elif expense.payment_file %}
+            <span class="color-amber font-bold">⚠️ Discrepancy / Attention</span>
+          {% else %}
+            <span class="color-muted">Single Proof (Bill Only)</span>
+          {% endif %}
+        </dd>
+
+        <dt>Submission Date</dt>
+        <dd>{{ expense.submitted_at }}</dd>
+
+        <dt>Client / Project</dt>
+        <dd>{{ expense.client_name or 'None provided' }}</dd>
+
+        <dt>Attendees</dt>
+        <dd>{{ expense.attendees if (expense.attendees and expense.attendees > 0) else 'None specified' }}</dd>
+      </dl>
+    </div>
+
+    <!-- Applicable Policy Reference -->
+    <div class="panel-box">
+      <span class="card-eyebrow">APPLICABLE POLICY LIMITS</span>
+      <div class="policy-snippet-box">
+        <div class="policy-snippet-row">
+          <span>Category Cap ({{ expense.category }}):</span>
+          {% if expense.category == 'Meals' %}
+            <strong>₹{{ "{:,.0f}".format(policy.category_caps.Meals_Trip if expense.is_trip else policy.category_caps.Meals_Local) }}</strong>
+          {% else %}
+            <strong>₹{{ "{:,.0f}".format(policy.category_caps.get(expense.category, 1500)) }}</strong>
+          {% endif %}
+        </div>
+
+        <div class="policy-snippet-row">
+          <span>City Per-Diem ({{ expense.city }}):</span>
+          <strong>₹{{ "{:,.0f}".format(policy.city_daily_limits.get(expense.city, policy.city_daily_limits.Other)) }}</strong>
+        </div>
+
+        <div class="policy-snippet-row">
+          <span>Meal Client Name Rule:</span>
+          <strong>Above ₹{{ policy.meal_rules.client_name_required_above }}</strong>
+        </div>
+
+        <div class="policy-snippet-row">
+          <span>Meal Attendee Rule:</span>
+          <strong>Above ₹{{ policy.meal_rules.attendees_required_above }}</strong>
+        </div>
+
+        <div class="policy-snippet-row">
+          <span>Manager Approval Threshold:</span>
+          <strong>₹{{ "{:,.0f}".format(policy.approval_thresholds.manager_approval) }}</strong>
+        </div>
+      </div>
+      <a href="{{ url_for('policy') }}" class="view-all-link" style="margin-top: 12px; display: inline-block;">
+        View full company policy rulebook ↗
+      </a>
+    </div>
+  </aside>
+</div>
+
+<!-- Modal 1: Formal Accounts Review Request (Request Info / Documents) -->
+<div id="requestInfoModal" class="modal-backdrop" style="display: none;">
+  <div class="modal-dialog">
+    <div class="modal-head">
+      <h3>Request Additional Documents / Info</h3>
+      <button class="modal-close-btn" onclick="closeRequestInfoModal()">✕</button>
+    </div>
+    <form method="post" action="{{ url_for('expense_request_info', expense_id=expense.id) }}">
+      <div class="modal-body">
+        <p class="small-sub">The claim will transition to <strong>ADDITIONAL_INFORMATION_REQUESTED</strong>. The employee will be notified and granted access to upload the requested proofs.</p>
+        
+        <div class="form-group" style="margin-bottom:12px;">
+          <label>Review Reason / Defect *</label>
+          <input type="text" name="review_reason" required placeholder="e.g. Missing itemized food bill or client confirmation" class="form-input">
+        </div>
+
+        <div class="form-group" style="margin-bottom:12px;">
+          <label>Specific Documents Requested *</label>
+          <input type="text" name="requested_documents" required placeholder="e.g. Tax invoice with GST breakdown, attendee list sign-off" class="form-input">
+        </div>
+
+        <div class="modal-action-row">
+          <button type="button" class="btn btn-secondary" onclick="closeRequestInfoModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="background:#f59e0b; border-color:#d97706; color:#000;">
+            📨 Dispatch Request to Employee
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal 2: Reject Claim with Mandatory Reason -->
+<div id="rejectModal" class="modal-backdrop" style="display: none;">
+  <div class="modal-dialog">
+    <div class="modal-head">
+      <h3>Reject Reimbursement Claim #{{ expense.id }}</h3>
+      <button class="modal-close-btn" onclick="closeRejectModal()">✕</button>
+    </div>
+    <form method="post" action="{{ url_for('expense_action', expense_id=expense.id) }}">
+      <input type="hidden" name="action" value="reject">
+      <div class="modal-body">
+        <p class="small-sub">Claim will transition to <strong>REJECTED</strong> with reimbursable balance set to ₹0.00. The employee will receive an instant rejection alert with your provided reason.</p>
+        
+        <div class="form-group" style="margin-bottom:14px;">
+          <label>Mandatory Rejection Reason *</label>
+          <textarea name="reject_reason" required rows="3" placeholder="Explain policy clause or non-reimbursable violation..." class="form-input"></textarea>
+        </div>
+
+        <div class="modal-action-row">
+          <button type="button" class="btn btn-secondary" onclick="closeRejectModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="background:#ef4444; border-color:#dc2626;">
+            Confirm Rejection
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal 3: Record Completed Payment (Mark REIMBURSED) -->
+<div id="recordPaymentModal" class="modal-backdrop" style="display: none;">
+  <div class="modal-dialog">
+    <div class="modal-head">
+      <h3>Record Completed Reimbursement Payout</h3>
+      <button class="modal-close-btn" onclick="closeRecordPaymentModal()">✕</button>
+    </div>
+    <form method="post" action="{{ url_for('expense_action', expense_id=expense.id) }}">
+      <input type="hidden" name="action" value="record_payment">
+      <div class="modal-body">
+        <p class="small-sub">Mark claim as <strong>REIMBURSED</strong>. This records financial payout execution and releases final payout notifications to {{ expense.employee }}.</p>
+        
+        <div class="form-group" style="margin-bottom:12px;">
+          <label>Disbursement Method *</label>
+          <select name="reimbursement_method" class="form-input">
+            <option value="UPI Transfer (GPay / PhonePe / Paytm)">UPI Transfer (GPay / PhonePe / Paytm)</option>
+            <option value="Direct Bank Transfer (NEFT / IMPS)">Direct Bank Transfer (NEFT / IMPS)</option>
+            <option value="Corporate Payroll Credit">Corporate Payroll Credit</option>
+            <option value="Corporate Credit Card Settlement">Corporate Credit Card Settlement</option>
+          </select>
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px;">
+          <label>Bank / UPI UTR Transaction Reference *</label>
+          <input type="text" name="reimbursement_tx_ref" required placeholder="e.g. 429182049102 or Bank Txn Ref" class="form-input font-mono">
+        </div>
+
+        <div class="modal-action-row">
+          <button type="button" class="btn btn-secondary" onclick="closeRecordPaymentModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="background:#16a34a; border-color:#22c55e;">
+            Confirm & Mark Reimbursed
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal 4: Copy Email Draft -->
+<div id="infoModal" class="modal-backdrop" style="display: none;">
+  <div class="modal-dialog">
+    <div class="modal-head">
+      <h3>Employee Clarification Email Draft</h3>
+      <button class="modal-close-btn" onclick="closeInfoModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="small-sub">Copy this auto-drafted message to paste into Slack, Teams, or Email for {{ expense.employee }}:</p>
+      <textarea id="emailDraftArea" class="form-input font-mono" rows="8">{{ draft_msg }}</textarea>
+      <div class="modal-action-row">
+        <button class="btn btn-secondary" onclick="copyDraft()">📋 Copy Message to Clipboard</button>
+      </div>
+<!-- Modal 5: Human-in-the-Loop OCR Field Correction -->
+<div id="fieldCorrectionModal" class="modal-backdrop" style="display: none;">
+  <div class="modal-dialog">
+    <div class="modal-head">
+      <h3>Correct Extracted OCR Field</h3>
+      <button class="modal-close-btn" onclick="closeFieldCorrectionModal()">✕</button>
+    </div>
+    <form method="post" action="{{ url_for('expense_field_correction', expense_id=expense.id) }}">
+      <div class="modal-body">
+        <p class="small-sub">
+          <strong>Immutable Audit Provenance:</strong> The original OCR extracted value is permanently preserved in the database. Your edit and rationale will be recorded in the audit trail.
+        </p>
+
+        <div class="form-group" style="margin-bottom:12px;">
+          <label>Target Field to Correct *</label>
+          <select name="field_name" id="correctFieldName" class="form-input" required onchange="updateCorrectionPlaceholder()">
+            <option value="amount">Claimed Amount (Current: ₹{{ expense.amount_inr }})</option>
+            <option value="merchant">Merchant / Vendor (Current: {{ expense.merchant }})</option>
+            <option value="expense_date">Transaction Date (Current: {{ expense.expense_date }})</option>
+            <option value="category">Category (Current: {{ expense.category }})</option>
+            <option value="city">City (Current: {{ expense.city }})</option>
+          </select>
+        </div>
+
+        <div class="form-group" style="margin-bottom:12px;">
+          <label>Corrected Value *</label>
+          <input type="text" name="corrected_value" id="correctedValueInput" required placeholder="Enter verified value from receipt..." class="form-input">
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px;">
+          <label>Audit Correction Reason / Justification *</label>
+          <input type="text" name="reason" required placeholder="e.g. Faded thermal printout digit 8 misread as 3" class="form-input">
+        </div>
+
+        <div class="modal-action-row">
+          <button type="button" class="btn btn-secondary" onclick="closeFieldCorrectionModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="background: #0f766e; border-color: #14b8a6;">
+            💾 Save Verified Correction
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let zoomLevel = 1.0;
+let rotationAngle = 0;
+let thermalEnhance = false;
+
+function switchEvidenceTab(mode) {
+  const billV = document.getElementById('billViewport');
+  const payV = document.getElementById('payViewport');
+  const bothV = document.getElementById('bothViewport');
+
+  const tabBill = document.getElementById('tabBillBtn');
+  const tabPay = document.getElementById('tabPayBtn');
+  const tabBoth = document.getElementById('tabBothBtn');
+
+  if (tabBill) tabBill.classList.remove('active');
+  if (tabPay) tabPay.classList.remove('active');
+  if (tabBoth) tabBoth.classList.remove('active');
+
+  if (mode === 'bill') {
+    if (billV) billV.style.display = 'block';
+    if (payV) payV.style.display = 'none';
+    if (bothV) bothV.style.display = 'none';
+    if (tabBill) tabBill.classList.add('active');
+  } else if (mode === 'pay') {
+    if (billV) billV.style.display = 'none';
+    if (payV) payV.style.display = 'block';
+    if (bothV) bothV.style.display = 'none';
+    if (tabPay) tabPay.classList.add('active');
+  } else if (mode === 'both') {
+    if (billV) billV.style.display = 'none';
+    if (payV) payV.style.display = 'none';
+    if (bothV) bothV.style.display = 'grid';
+    if (tabBoth) tabBoth.classList.add('active');
+  }
+}
+
+function zoomReceipt(factor) {
+  zoomLevel = Math.max(0.4, Math.min(3.0, zoomLevel * factor));
+  applyReceiptTransforms();
+}
+
+function rotateReceipt(deg) {
+  rotationAngle = (rotationAngle + deg) % 360;
+  applyReceiptTransforms();
+}
+
+function toggleInspectorThermal() {
+  thermalEnhance = !thermalEnhance;
+  const btn = document.getElementById('thermalToggleBtn');
+  if (btn) btn.classList.toggle('active', thermalEnhance);
+  applyReceiptTransforms();
+}
+
+function applyReceiptTransforms() {
+  const images = document.querySelectorAll('.inspect-receipt-image');
+  images.forEach(img => {
+    const filter = thermalEnhance ? 'contrast(240%) brightness(88%) grayscale(100%)' : 'none';
+    img.style.filter = filter;
+    img.style.transform = `scale(${zoomLevel}) rotate(${rotationAngle}deg)`;
+  });
+}
+
+// Modal controls
+function openRequestInfoModal() {
+  document.getElementById('requestInfoModal').style.display = 'flex';
+}
+function closeRequestInfoModal() {
+  document.getElementById('requestInfoModal').style.display = 'none';
+}
+
+function openRejectModal() {
+  document.getElementById('rejectModal').style.display = 'flex';
+}
+function closeRejectModal() {
+  document.getElementById('rejectModal').style.display = 'none';
+}
+
+function openRecordPaymentModal() {
+  document.getElementById('recordPaymentModal').style.display = 'flex';
+}
+function closeRecordPaymentModal() {
+  document.getElementById('recordPaymentModal').style.display = 'none';
+}
+
+function openInfoModal() {
+  document.getElementById('infoModal').style.display = 'flex';
+}
+function closeInfoModal() {
+  document.getElementById('infoModal').style.display = 'none';
+}
+
+function copyDraft() {
+  const text = document.getElementById('emailDraftArea').value;
+  navigator.clipboard.writeText(text).then(() => {
+    alert('Copied clarification message to clipboard!');
+  });
+}
+
+function openFieldCorrectionModal() {
+  document.getElementById('fieldCorrectionModal').style.display = 'flex';
+}
+function closeFieldCorrectionModal() {
+  document.getElementById('fieldCorrectionModal').style.display = 'none';
+}
+function updateCorrectionPlaceholder() {
+  const f = document.getElementById('correctFieldName').value;
+  const input = document.getElementById('correctedValueInput');
+  if (f === 'amount') input.placeholder = 'e.g. 1450.00';
+  else if (f === 'expense_date') input.placeholder = 'YYYY-MM-DD';
+  else if (f === 'merchant') input.placeholder = 'e.g. Starbucks Coffee';
+  else input.placeholder = 'Enter corrected value...';
+}
+</script>
+{% endblock %}

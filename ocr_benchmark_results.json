@@ -1,0 +1,135 @@
+{
+  "timestamp": "2026-10-17 23:41:51",
+  "total_receipts": 6,
+  "metrics": {
+    "merchant_accuracy_pct": 100.0,
+    "date_accuracy_pct": 100.0,
+    "total_accuracy_pct": 100.0,
+    "currency_accuracy_pct": 100.0,
+    "mean_cer": 0.0,
+    "mean_wer": 0.0,
+    "avg_latency_ms": 1.32
+  },
+  "detailed_results": [
+    {
+      "id": "BM-01",
+      "category": "Clean Printed Receipt",
+      "merchant_match": true,
+      "date_match": true,
+      "total_match": true,
+      "currency_match": true,
+      "extracted_merchant": "THEOBROMA FOODS PVT LTD",
+      "extracted_date": "2026-10-12",
+      "extracted_total": 766.5,
+      "expected_total": 766.5,
+      "confidence": {
+        "merchant": 0.88,
+        "date": 0.92,
+        "currency": 0.95,
+        "total": 0.9700000000000001,
+        "overall": 0.93
+      },
+      "duration_ms": 3.5
+    },
+    {
+      "id": "BM-02",
+      "category": "Indian Number Formatting",
+      "merchant_match": true,
+      "date_match": true,
+      "total_match": true,
+      "currency_match": true,
+      "extracted_merchant": "CROMA ELECTRONICS - INFINITI RETAIL LTD",
+      "extracted_date": "2026-09-28",
+      "extracted_total": 145679.0,
+      "expected_total": 145679.0,
+      "confidence": {
+        "merchant": 0.88,
+        "date": 0.92,
+        "currency": 0.7,
+        "total": 0.9700000000000001,
+        "overall": 0.87
+      },
+      "duration_ms": 0.46
+    },
+    {
+      "id": "BM-03",
+      "category": "Faded / Low-Contrast Thermal Receipt",
+      "merchant_match": true,
+      "date_match": true,
+      "total_match": true,
+      "currency_match": true,
+      "extracted_merchant": "MERU CABS AIRPORT SERVICES",
+      "extracted_date": "2026-10-05",
+      "extracted_total": 1400.0,
+      "expected_total": 1400.0,
+      "confidence": {
+        "merchant": 0.88,
+        "date": 0.92,
+        "currency": 0.95,
+        "total": 0.9700000000000001,
+        "overall": 0.93
+      },
+      "duration_ms": 0.7
+    },
+    {
+      "id": "BM-04",
+      "category": "Multi-Currency Foreign Invoice",
+      "merchant_match": true,
+      "date_match": true,
+      "total_match": true,
+      "currency_match": true,
+      "extracted_merchant": "GITHUB INC  MICROSOFT CORP",
+      "extracted_date": "2026-10-04",
+      "extracted_total": 39.0,
+      "expected_total": 39.0,
+      "confidence": {
+        "merchant": 0.88,
+        "date": 0.92,
+        "currency": 0.95,
+        "total": 0.9700000000000001,
+        "overall": 0.93
+      },
+      "duration_ms": 2.5
+    },
+    {
+      "id": "BM-05",
+      "category": "Multiple Candidate Totals / Discount Mismatch",
+      "merchant_match": true,
+      "date_match": true,
+      "total_match": true,
+      "currency_match": true,
+      "extracted_merchant": "ITC GRAND CHOLA - CHENNAI",
+      "extracted_date": "2026-10-10",
+      "extracted_total": 3168.0,
+      "expected_total": 3168.0,
+      "confidence": {
+        "merchant": 0.88,
+        "date": 0.92,
+        "currency": 0.7,
+        "total": 0.9700000000000001,
+        "overall": 0.87
+      },
+      "duration_ms": 0.34
+    },
+    {
+      "id": "BM-06",
+      "category": "Client Meal with Tip & Surcharge",
+      "merchant_match": true,
+      "date_match": true,
+      "total_match": true,
+      "currency_match": true,
+      "extracted_merchant": "TOIT BREWPUB INDIRANAGAR",
+      "extracted_date": "2026-10-15",
+      "extracted_total": 2929.76,
+      "expected_total": 2929.76,
+      "confidence": {
+        "merchant": 0.88,
+        "date": 0.92,
+        "currency": 0.7,
+        "total": 0.9700000000000001,
+        "overall": 0.87
+      },
+      "duration_ms": 0.44
+    }
+  ]
+}
