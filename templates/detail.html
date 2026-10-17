@@ -43,10 +43,217 @@
   </div>
 </div>
 
+<!-- 5 Distinct Status Dimensions Banner -->
+<div class="metrics-grid" style="margin-bottom: 24px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+  <div class="metric-card" style="padding: 14px; background: white; border: 1px solid var(--border);">
+    <div class="metric-head" style="margin-bottom: 6px;">
+      <span class="metric-label" style="font-size: 0.75rem;">1. EVIDENCE VERIFICATION</span>
+      <span class="metric-icon">🧾</span>
+    </div>
+    <div style="font-weight: 700; font-size: 0.95rem;">
+      {% if expense.evidence_verification_status == 'VERIFIED' %}
+        <span class="color-green">✓ VERIFIED</span>
+      {% elif expense.evidence_verification_status == 'MISMATCH' %}
+        <span class="color-red">⚠️ MISMATCH</span>
+      {% elif expense.evidence_verification_status == 'INCOMPLETE' %}
+        <span class="color-amber">⏳ INCOMPLETE</span>
+      {% elif expense.evidence_verification_status == 'PAYMENT_UNCONFIRMED' %}
+        <span class="color-amber">❓ UNCONFIRMED</span>
+      {% else %}
+        <span class="color-amber">⚖️ NEEDS REVIEW</span>
+      {% endif %}
+    </div>
+    <div class="table-sub" style="margin-top: 4px;">Bill & payment match</div>
+  </div>
+
+  <div class="metric-card" style="padding: 14px; background: white; border: 1px solid var(--border);">
+    <div class="metric-head" style="margin-bottom: 6px;">
+      <span class="metric-label" style="font-size: 0.75rem;">2. POLICY COMPLIANCE</span>
+      <span class="metric-icon">🛡️</span>
+    </div>
+    <div style="font-weight: 700; font-size: 0.95rem;">
+      {% if expense.policy_compliance_status == 'PASS' %}
+        <span class="color-green">✓ PASS</span>
+      {% elif expense.policy_compliance_status == 'WARNING' %}
+        <span class="color-amber">⚠️ WARNING</span>
+      {% elif expense.policy_compliance_status == 'VIOLATION' %}
+        <span class="color-red">✕ VIOLATION</span>
+      {% else %}
+        <span class="color-amber">⚖️ MANUAL REVIEW</span>
+      {% endif %}
+    </div>
+    <div class="table-sub" style="margin-top: 4px;">Caps & per-diem rules</div>
+  </div>
+
+  <div class="metric-card" style="padding: 14px; background: white; border: 1px solid var(--border);">
+    <div class="metric-head" style="margin-bottom: 6px;">
+      <span class="metric-label" style="font-size: 0.75rem;">3. BUDGET STATUS</span>
+      <span class="metric-icon">💼</span>
+    </div>
+    <div style="font-weight: 700; font-size: 0.95rem;">
+      {% if expense.budget_status == 'WITHIN_CAP' %}
+        <span class="color-green">✓ WITHIN CAP</span>
+      {% elif expense.budget_status == 'CAP_EXHAUSTED' %}
+        <span class="color-red">✕ EXHAUSTED</span>
+      {% elif expense.budget_status == 'INSUFFICIENT_BALANCE' %}
+        <span class="color-red">⚠️ INSUFFICIENT</span>
+      {% elif expense.budget_status == 'RESERVATION_ACTIVE' %}
+        <span class="color-amber">🔒 RESERVED</span>
+      {% else %}
+        <span class="text-muted">INACTIVE</span>
+      {% endif %}
+    </div>
+    <div class="table-sub" style="margin-top: 4px;">Project spending balance</div>
+  </div>
+
+  <div class="metric-card" style="padding: 14px; background: white; border: 1px solid var(--border);">
+    <div class="metric-head" style="margin-bottom: 6px;">
+      <span class="metric-label" style="font-size: 0.75rem;">4. APPROVAL WORKFLOW</span>
+      <span class="metric-icon">⚡</span>
+    </div>
+    <div style="font-weight: 700; font-size: 0.95rem;">
+      {% if expense.approval_status in ('AUTO_APPROVED', 'Approved') %}
+        <span class="color-green">✓ {{ expense.approval_status }}</span>
+      {% elif expense.approval_status == 'PENDING_ACCOUNTS_ADMIN' %}
+        <span class="color-red">🛡️ ADMIN ESCALATION</span>
+      {% elif expense.approval_status == 'PENDING_ACCOUNTS' %}
+        <span class="color-amber">⚖️ ACCOUNTS REVIEW</span>
+      {% elif expense.approval_status == 'NEEDS_INFORMATION' %}
+        <span class="color-amber">⏳ NEEDS INFO</span>
+      {% elif expense.approval_status == 'REJECTED' %}
+        <span class="color-red">✕ REJECTED</span>
+      {% else %}
+        <span class="text-muted">{{ expense.approval_status or expense.status }}</span>
+      {% endif %}
+    </div>
+    <div class="table-sub" style="margin-top: 4px;">Approval governance</div>
+  </div>
+
+  <div class="metric-card" style="padding: 14px; background: white; border: 1px solid var(--border);">
+    <div class="metric-head" style="margin-bottom: 6px;">
+      <span class="metric-label" style="font-size: 0.75rem;">5. REIMBURSEMENT PAYOUT</span>
+      <span class="metric-icon">💳</span>
+    </div>
+    <div style="font-weight: 700; font-size: 0.95rem;">
+      {% if expense.reimbursement_status == 'REIMBURSED' %}
+        <span class="color-green">💳 REIMBURSED</span>
+      {% elif expense.reimbursement_status == 'READY_FOR_REIMBURSEMENT' %}
+        <span class="color-green">READY FOR PAYOUT</span>
+      {% elif expense.reimbursement_status == 'REIMBURSEMENT_PROCESSING' %}
+        <span class="color-amber">PROCESSING</span>
+      {% else %}
+        <span class="text-muted">NOT READY</span>
+      {% endif %}
+    </div>
+    <div class="table-sub" style="margin-top: 4px;">Banking disbursement</div>
+  </div>
+</div>
+
 <!-- Main Audit Grid -->
 <div class="audit-workspace-grid">
   <!-- Left Column: Financials, Explainable Decision, Line Items, Actions -->
   <section class="audit-left-col">
+    <!-- Project Budget Allocation & Double-Entry Ledger Card -->
+    {% if allocation %}
+    <div class="panel-box" style="margin-bottom: 20px; border-left: 4px solid var(--primary, #0f766e);">
+      <div class="panel-head-row">
+        <div>
+          <span class="card-eyebrow">PROJECT BUDGET ALLOCATION · REAL-TIME LEDGER</span>
+          <h2 class="panel-title">{{ project.code if project else 'PROJECT' }} Spending Cap & Balance</h2>
+        </div>
+        <span class="status-pill {% if allocation.status == 'ACTIVE' %}status-approved{% else %}status-rejected{% endif %}">
+          {{ allocation.status }}
+        </span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin: 15px 0; background: #f8fafc; padding: 14px; border-radius: 8px;">
+        <div>
+          <span class="table-sub">Allocated Cap:</span>
+          <div class="font-mono font-bold" style="font-size: 1.05rem;">₹{{ "{:,.2f}".format(allocation.allocated_cap) }}</div>
+        </div>
+        <div>
+          <span class="table-sub">Approved Spend:</span>
+          <div class="font-mono font-bold color-green" style="font-size: 1.05rem;">- ₹{{ "{:,.2f}".format(allocation.approved_expenditure) }}</div>
+        </div>
+        <div>
+          <span class="table-sub">Reserved:</span>
+          <div class="font-mono font-bold color-amber" style="font-size: 1.05rem;">- ₹{{ "{:,.2f}".format(allocation.reserved_expenditure) }}</div>
+        </div>
+        <div>
+          <span class="table-sub">Remaining Balance:</span>
+          <div class="font-mono font-bold {% if allocation.remaining_balance <= 0 %}color-red{% else %}color-green{% endif %}" style="font-size: 1.15rem;">
+            ₹{{ "{:,.2f}".format(allocation.remaining_balance) }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Ledger Transactions for this claim -->
+      {% if ledger_entries %}
+      <div style="margin-top: 14px;">
+        <strong style="font-size: 0.85rem; color: #475569;">COMMITTED BUDGET LEDGER ENTRIES:</strong>
+        <div class="table-container" style="margin-top: 8px;">
+          <table class="data-table" style="font-size: 0.82rem;">
+            <thead>
+              <tr>
+                <th>LEDGER ID</th>
+                <th>ENTRY TYPE</th>
+                <th>AMOUNT</th>
+                <th>BALANCE AFTER</th>
+                <th>ACTOR</th>
+                <th>TIMESTAMP</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for l in ledger_entries %}
+              <tr>
+                <td class="font-mono">#LEDGER-{{ l.id }}</td>
+                <td><span class="status-pill {% if l.entry_type == 'EXPENDITURE' %}status-rejected{% else %}status-approved{% endif %}">{{ l.entry_type }}</span></td>
+                <td class="font-mono font-bold">{% if l.amount < 0 %}-₹{{ "{:,.2f}".format(l.amount|abs) }}{% else %}₹{{ "{:,.2f}".format(l.amount) }}{% endif %}</td>
+                <td class="font-mono">₹{{ "{:,.2f}".format(l.balance_after) }}</td>
+                <td>{{ l.actor }}</td>
+                <td class="table-sub">{{ l.created_at }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- 17 Auto-Approval Conditions Evaluation Checklist -->
+    {% if verification_details and verification_details|length > 0 %}
+    <div class="panel-box" style="margin-bottom: 20px;">
+      <div class="panel-head-row">
+        <div>
+          <span class="card-eyebrow">DETERMINISTIC AUTO-APPROVAL ENGINE</span>
+          <h2 class="panel-title">17 Mandatory Verification Conditions</h2>
+        </div>
+        {% set all_passed = (verification_details.values()|selectattr("passed")|list|length) == (verification_details|length) %}
+        <span class="status-pill {% if all_passed %}status-approved{% else %}status-needs-info{% endif %}">
+          {{ verification_details.values()|selectattr("passed")|list|length }} / {{ verification_details|length }} PASSED
+        </span>
+      </div>
+
+      <div class="conditions-checklist-grid" style="display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 12px;">
+        {% for key, cond in verification_details.items() %}
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: {% if cond.passed %}#f0fdf4{% else %}#fef2f2{% endif %}; border-radius: 6px; border: 1px solid {% if cond.passed %}#bbf7d0{% else %}#fecaca{% endif %};">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 1rem;">{% if cond.passed %}✅{% else %}❌{% endif %}</span>
+            <div>
+              <strong style="font-size: 0.85rem; color: #1e293b;">{{ key|replace('_', ' ')|upper }}</strong>
+              <div style="font-size: 0.78rem; color: #475569;">{{ cond.detail }}</div>
+            </div>
+          </div>
+          <span class="status-pill {% if cond.passed %}status-approved{% else %}status-rejected{% endif %}" style="font-size: 0.7rem;">
+            {% if cond.passed %}PASSED{% else %}FAILED{% endif %}
+          </span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
     <!-- Financial Comparison Panel -->
     <div class="financials-trio-panel">
       <div class="fin-box">

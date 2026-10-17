@@ -18,6 +18,9 @@
 10. [Demo Login Credentials & Quick Persona Switcher](#demo-login-credentials--quick-persona-switcher)
 11. [Installation & Windows PowerShell Setup Guide](#installation--windows-powershell-setup-guide)
 12. [Automated Test Suite Execution](#automated-test-suite-execution)
+13. [Project-Wise Budget Caps, Persistent Ledger & Conditional Auto-Approval](#project-wise-budget-caps-persistent-ledger--conditional-auto-approval)
+14. [How to Fix & Verify GitHub Pages](#how-to-fix--verify-github-pages)
+15. [Production Health Check & Verification](#production-health-check--verification)
 
 ---
 
@@ -290,5 +293,150 @@ OK
 ```
 
 All 34 automated tests execute cleanly with a 100% pass rate.
-#   r e c e i p t - g r a v e y a r d  
- 
+# receipt-graveyard
+
+---
+
+## 13. Deployment Architecture: GitHub Pages vs. Python Cloud Host
+
+### Root Cause of the GitHub Pages 404 Error:
+1. **GitHub Pages is a Static Host**: GitHub Pages serves static HTML/CSS/JS files directly from a repository branch. It cannot execute Python, run Gunicorn WSGI workers, execute OpenCV / RapidOCR models, or manage SQLite databases.
+2. **Missing Repository Root Entry**: Previously, `index.html` was untracked locally and had not been pushed to `main`. When GitHub Pages attempted to serve `https://pratitdedhia.github.io/receipt-graveyard/`, it found no `index.html` on the remote branch, returning `404 - File not found`.
+
+### Recommended Dual-Tier Deployment:
+- **Tier 1 — GitHub Pages (`https://pratitdedhia.github.io/receipt-graveyard/`)**:
+  Serves as the high-speed static Showcase and Architectural Portal. It loads `index.html`, displays the core capabilities, explains the system architecture, and directs evaluators to the live deployed backend.
+- **Tier 2 — Python Application Host (Render / Railway / Cloud VM)**:
+  Executes the full Flask web application, RapidOCR neural engine, perceptual hashing, and persistent SQLite database at e.g. `https://receipt-graveyard.onrender.com`.
+
+---
+
+## 14. Step-by-Step Render Deployment Guide
+
+The repository includes a ready-to-use **`render.yaml`** blueprint and **`Procfile`**.
+
+### Option A: 1-Click Render Blueprint (Recommended)
+1. Sign in to your [Render Dashboard](https://dashboard.render.com).
+2. Click **New +** → **Blueprint**.
+3. Connect your repository: `https://github.com/pratitdedhia/receipt-graveyard`.
+4. Render automatically detects `render.yaml` with:
+   - Python runtime with Gunicorn server: `gunicorn app:app --workers 2 --threads 4 --timeout 120 --bind 0.0.0.0:$PORT`
+   - Persistent Disk mounted at `/var/data` (for `expenses.db` and uploaded receipts)
+   - Health check path configured at `/health`
+5. Click **Apply**. Render will build and deploy your service.
+
+### Option B: Manual Web Service Setup
+If creating a manual Web Service on Render:
+- **Environment**: Python
+- **Build Command**: `pip install --upgrade pip && pip install -r requirements.txt`
+- **Start Command**: `gunicorn app:app --workers 2 --threads 4 --timeout 120 --bind 0.0.0.0:$PORT`
+- **Health Check Path**: `/health`
+- **Environment Variables**:
+  - `PYTHON_VERSION`: `3.11.9`
+  - `SECRET_KEY`: *(Generate a secure random string)*
+  - `FLASK_DEBUG`: `0`
+  - `RECEIPT_GRAVEYARD_DATA_DIR`: `/var/data` (or omit for local project folder)
+- **Disks (Optional but recommended for persistence)**:
+  - Name: `receipt-storage`
+  - Mount Path: `/var/data`
+  - Size: 1 GB
+
+---
+
+---
+
+## 13. Project-Wise Budget Caps, Persistent Ledger & Conditional Auto-Approval
+
+The platform incorporates an enterprise-grade financial workflow engine (`budget_engine.py`) managing employee spending caps per project, persistent double-entry balance ledgers, and deterministic autonomous approval for verified claims.
+
+### A. Core Accounting & Allocation Model
+* **Independent Project Allocations:** An authorized administrator assigns individual employees a specific spending cap for each project (e.g. Employee A receives ₹4,000 for *Project Alpha* and ₹2,500 for *Project Beta*). Allocations are completely isolated; expenses on Alpha never deplete Beta.
+* **Authoritative Balance Formula:**
+  $$\text{Remaining Available Budget} = \text{Allocated Cap} - \text{Net Approved Expenditure} - \text{Active Reservations}$$
+  Balances are derived dynamically from persistent database ledger records (`budget_ledger` & `project_allocations`), never hardcoded or trusted from client requests.
+* **Decimal Precision:** All monetary amounts are computed using Python `Decimal` with `ROUND_HALF_UP` to prevent IEEE 754 binary floating-point roundoff errors.
+
+### B. The 17 Deterministic Auto-Approval Conditions
+An expense can be automatically approved if and only if all 17 conditions pass:
+1. **User Authentication:** Employee account is active and approved (`APPROVED`).
+2. **Project Assignment:** Employee is assigned to the selected project.
+3. **Active Allocation:** Employee's allocation status is `ACTIVE`.
+4. **Valid Duration:** Project is `Active` and transaction date falls within valid dates.
+5. **Itemized Bill Readable:** Bill document is attached with readable financial data.
+6. **Payment Proof Present:** Payment screenshot or verified digital reference is present.
+7. **OCR Confidence:** Critical OCR fields have high extraction confidence.
+8. **Bill Reconciled with Claim:** Claimed amount matches extracted bill total within ₹1.00 tolerance.
+9. **Payment Proof Reconciled:** Payment screenshot amount matches invoice total.
+10. **Payment Confirmed:** Payment screenshot demonstrates a completed, successful transaction.
+11. **Transaction Link:** Bill and payment proof are confirmed to represent the same transaction.
+12. **Duplicate Check:** No duplicate receipt image (perceptual hash), reference, or claim detected.
+13. **Policy Compliance:** Complies with category caps, daily allowances, and office meal rules.
+14. **Arithmetic & Line Items:** Verified receipt mathematics; zero non-reimbursable line items (e.g., alcohol/tobacco).
+15. **Approval Threshold:** Claim does not exceed mandatory manager (₹8,000) or VP (₹20,000) escalation limits.
+16. **Budget Balance Check:** Claim does not exceed the remaining project allocation.
+17. **Atomic Commitment:** Allocation balance is successfully decremented without concurrency conflicts.
+
+### C. Persistent Ledger & Reversals
+* **Atomic Deduction:** Balance deduction executes under a database transaction with `UPDATE project_allocations SET ... WHERE remaining_balance >= ?`, preventing concurrent overspending.
+* **Idempotent Approvals:** Prevents double-counting retries.
+* **Compensating Reversals:** Approved expenses can be reversed by Accounts Admins with a recorded reason. The original ledger record is never deleted; an immutable `REVERSAL` entry with a negative amount is appended, restoring the employee's budget.
+* **Audit Adjustments:** Cap changes are tracked in `allocation_adjustments` with the previous cap, new cap, actor, timestamp, and mandatory reason.
+
+### D. Five Distinct Status Dimensions
+Instead of a single conflated status, expenses maintain 5 distinct dimensions:
+| Dimension | Possible Values |
+|---|---|
+| **Evidence Verification** | `PENDING`, `VERIFIED`, `NEEDS_REVIEW`, `MISMATCH`, `INCOMPLETE`, `PAYMENT_UNCONFIRMED` |
+| **Policy Compliance** | `PASS`, `WARNING`, `VIOLATION`, `MANUAL_REVIEW` |
+| **Budget Status** | `WITHIN_CAP`, `INSUFFICIENT_BALANCE`, `CAP_EXHAUSTED`, `RESERVATION_ACTIVE`, `ALLOCATION_INACTIVE` |
+| **Approval Status** | `DRAFT`, `SUBMITTED`, `AUTO_APPROVED`, `PENDING_ACCOUNTS`, `PENDING_ACCOUNTS_ADMIN`, `NEEDS_INFORMATION`, `APPROVED`, `REJECTED`, `WITHDRAWN` |
+| **Reimbursement Status** | `NOT_READY`, `READY_FOR_REIMBURSEMENT`, `REIMBURSEMENT_PROCESSING`, `REIMBURSED`, `REIMBURSEMENT_FAILED` |
+
+### E. Accounts Routing & Segregation of Duties
+* **Segregation of Duties:** Employees are strictly prohibited from approving their own expenses, even if they possess Accounts or Admin roles.
+* **Routine Discrepancies:** Routed to **Accounts Reviewer** (`PENDING_ACCOUNTS`) for evidence inspection, OCR review, and side-by-side reconciliation.
+* **Policy Violations & Budget Exhaustion:** Routed to **Accounts Admin** (`PENDING_ACCOUNTS_ADMIN`) for allocation adjustment or elevated review.
+* **Missing Documents:** Flagged as `NEEDS_INFORMATION`, triggering in-app employee notifications to upload proof.
+
+---
+
+## 14. How to Fix & Verify GitHub Pages
+
+To make `https://pratitdedhia.github.io/receipt-graveyard/` live immediately:
+1. Commit the tracked `index.html` and push to `origin main`:
+   ```bash
+   git add index.html templates/ static/ render.yaml Procfile requirements.txt .gitignore README.md
+   git commit -m "Configure production deployment and GitHub Pages portal"
+   git push origin main
+   ```
+2. In your GitHub repository settings:
+   - Navigate to **Settings** → **Pages**.
+   - Under **Build and deployment**:
+     - Source: `Deploy from a branch`
+     - Branch: `main` / Folder: `/ (root)`
+   - Click **Save**.
+3. Within 1-2 minutes, GitHub Pages will deploy `https://pratitdedhia.github.io/receipt-graveyard/`.
+4. The 404 will be resolved and replaced with the interactive platform portal.
+
+---
+
+## 15. Production Health Check & Verification
+
+Once deployed to Render or running locally:
+- **Health Check Endpoint**: `GET /health` or `GET /api/health`
+  - Returns `200 OK` with JSON:
+    ```json
+    {
+      "status": "healthy",
+      "service": "The Receipt Graveyard - AI Expense Auditor",
+      "database": "connected",
+      "ocr_engine": "RapidOCR/ONNX Hybrid",
+      "timestamp": "2026-10-18T..."
+    }
+    ```
+- **Live Local Verification**:
+  ```powershell
+  curl http://127.0.0.1:5000/health
+  ```
+
+

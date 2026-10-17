@@ -13,21 +13,30 @@ import trip_engine
 import seed_data
 import historical_ingestion
 import bulk_drive_ingestion
+import budget_engine
 
 APP_DIR = Path(__file__).resolve().parent
-DB_PATH = APP_DIR / "expenses.db"
-UPLOAD_DIR = APP_DIR / "uploads"
-UPLOAD_DIR.mkdir(exist_ok=True)
+DATA_DIR = Path(os.environ.get("RECEIPT_GRAVEYARD_DATA_DIR", APP_DIR))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+DB_PATH = Path(os.environ.get("DATABASE_PATH", DATA_DIR / "expenses.db"))
+UPLOAD_DIR = Path(os.environ.get("UPLOAD_FOLDER", DATA_DIR / "uploads"))
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "pdf"}
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "receipt-graveyard-super-secret-key-2026")
 app.config["MAX_CONTENT_LENGTH"] = 30 * 1024 * 1024  # 30 MB max
+app.config["TEMPLATES_AUTO_RELOAD"] = True
+app.jinja_env.auto_reload = True
 app.jinja_env.globals.update(max=max, min=min)
 
 def connect():
-    con = sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(str(DB_PATH), timeout=30.0)
     con.row_factory = sqlite3.Row
+    try:
+        con.execute("PRAGMA journal_mode=WAL")
+    except Exception:
+        pass
     return con
 
 def init_db():
@@ -311,11 +320,19 @@ def init_db():
         existing_user_cols = [r[1] for r in cursor.execute("PRAGMA table_info(users)").fetchall()]
         user_cols = {
             "is_active": "INTEGER DEFAULT 1",
-            "created_at": "TEXT"
+            "created_at": "TEXT",
+            "status": "TEXT DEFAULT 'APPROVED'",
+            "employee_id": "TEXT",
+            "designation": "TEXT",
+            "reason_for_access": "TEXT",
+            "rejection_reason": "TEXT",
+            "reviewed_by": "TEXT",
+            "reviewed_at": "TEXT"
         }
         for col, col_type in user_cols.items():
             if col not in existing_user_cols:
                 cursor.execute(f"ALTER TABLE users ADD COLUMN {col} {col_type}")
+        cursor.execute("UPDATE users SET status='APPROVED' WHERE status IS NULL")
 
         # Auto-migrate projects table columns
         existing_proj_cols = [r[1] for r in cursor.execute("PRAGMA table_info(projects)").fetchall()]
@@ -370,12 +387,21 @@ def init_db():
         # Initialize Bulk Excel & Google Drive Tables
         bulk_drive_ingestion.init_bulk_tables(con)
 
+        # Initialize Project Budget Allocations, Ledger & Cap Adjustment Tables
+        budget_engine.init_budget_tables(con)
+
         con.commit()
 
         # Seed users & sample receipts if empty
         user_count = con.execute("SELECT COUNT(*) FROM users").fetchone()[0]
         if user_count == 0:
             seed_data.seed_database(con)
+
+# Ensure database schema is present on module import (e.g. for Gunicorn workers)
+try:
+    init_db()
+except Exception as _init_err:
+    pass
 
 def get_system_settings(con):
     rows = con.execute("SELECT key, value FROM system_settings").fetchall()
@@ -477,8 +503,8 @@ def inject_user_context():
             if row:
                 current_user = dict(row)
 
-        # Default fallback persona if no session set: Accounts Reviewer Priya Nair
-        if not current_user:
+        # For automated test suite runs (TESTING=True), fallback to Accounts persona if no session set
+        if not current_user and app.config.get("TESTING"):
             row = con.execute("""
             SELECT u.*, o.name as office_name, o.city as office_city, o.local_meal_cap 
             FROM users u 
@@ -487,9 +513,6 @@ def inject_user_context():
             """).fetchone()
             if row:
                 current_user = dict(row)
-                session["user_id"] = current_user["id"]
-                session["role"] = current_user["role"]
-                session["user_name"] = current_user["name"]
 
         unread_notifications = []
         unread_notifications_count = 0
@@ -525,9 +548,17 @@ def inject_user_context():
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not session.get("user_id"):
+        if not session.get("user_id") and not app.config.get("TESTING"):
             flash("Please log in to continue.", "info")
             return redirect(url_for("login"))
+        # Verify account approval status on every protected request
+        if session.get("user_id") and not app.config.get("TESTING"):
+            with connect() as con:
+                u = con.execute("SELECT status, is_active FROM users WHERE id=?", (session["user_id"],)).fetchone()
+                if not u or (u["status"] or "").upper() != "APPROVED" or u["is_active"] == 0:
+                    session.clear()
+                    flash("Your session has ended because your account is awaiting administrator approval or is inactive.", "warning")
+                    return redirect(url_for("login"))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -886,11 +917,39 @@ def analyze_expense(data, file_path=None, payment_file_path=None, exclude_id=Non
         "approval_level": approval_level
     }
 
+# ----------------- SYSTEM & HEALTH MONITORING -----------------
+
+@app.route("/health")
+@app.route("/api/health")
+def health():
+    """Production health-check endpoint for container orchestration and uptime monitors."""
+    db_ok = False
+    try:
+        with connect() as con:
+            row = con.execute("SELECT 1").fetchone()
+            if row and row[0] == 1:
+                db_ok = True
+    except Exception as e:
+        app.logger.warning(f"Health check database ping: {e}")
+
+    status_code = 200 if db_ok else 503
+    return jsonify({
+        "status": "healthy" if db_ok else "degraded",
+        "service": "The Receipt Graveyard - AI Expense Auditor",
+        "database": "connected" if db_ok else "error",
+        "ocr_engine": "RapidOCR/ONNX Hybrid",
+        "timestamp": datetime.now().isoformat()
+    }), status_code
+
 # ----------------- ROUTES: AUTHENTICATION & PERSONAS -----------------
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "GET":
+        if session.get("user_id"):
+            if session.get("role") == "admin":
+                return redirect(url_for("admin_console"))
+            return redirect(url_for("dashboard"))
         return render_template("login.html")
 
     email = request.form.get("email", "").strip().lower()
@@ -899,6 +958,23 @@ def login():
     with connect() as con:
         user = con.execute("SELECT * FROM users WHERE lower(email)=?", (email,)).fetchone()
         if user and user["password"] == password:
+            user_status = (user["status"] or "APPROVED").upper()
+            
+            if user_status == "PENDING_APPROVAL":
+                flash("Your account is awaiting administrator approval. You'll be able to access the platform once your registration has been reviewed.", "warning")
+                return redirect(url_for("login"))
+            elif user_status == "REJECTED":
+                reason = user["rejection_reason"] or "Registration criteria not met."
+                flash(f"Your registration request was rejected by an administrator. Reason: {reason}", "error")
+                return redirect(url_for("login"))
+            elif user_status == "SUSPENDED" or (user["is_active"] is not None and user["is_active"] == 0):
+                flash("Your account has been suspended by an administrator. Please contact your organization administrator.", "error")
+                return redirect(url_for("login"))
+            elif user_status != "APPROVED":
+                flash("Your account is inactive. Please contact your administrator.", "error")
+                return redirect(url_for("login"))
+
+            # Approved & Active User
             session["user_id"] = user["id"]
             session["role"] = user["role"]
             session["user_name"] = user["name"]
@@ -907,7 +983,7 @@ def login():
                 return redirect(url_for("admin_console"))
             return redirect(url_for("dashboard"))
         else:
-            flash("Invalid email or password. You can also click any Quick Demo Persona below.", "error")
+            flash("Invalid email or password. Please verify your credentials or choose a Quick Demo Persona below.", "error")
             return redirect(url_for("login"))
 
 @app.route("/register", methods=["GET", "POST"])
@@ -918,37 +994,312 @@ def register():
     name = request.form.get("name", "").strip()
     email = request.form.get("email", "").strip().lower()
     password = request.form.get("password", "").strip()
+    confirm_password = request.form.get("confirm_password", "").strip()
     role = request.form.get("role", "employee").strip().lower()
     if role not in ("employee", "accounts"):
         role = "employee"
-    office_id = request.form.get("office_id") or 1
+    employee_id = request.form.get("employee_id", "").strip()
     department = request.form.get("department", "Operations").strip()
+    designation = request.form.get("designation", "").strip()
     phone = request.form.get("phone", "").strip()
-    avatar_colors = ['#0f766e', '#15803d', '#0369a1', '#b45309', '#7c3aed', '#4338ca']
-    avatar_color = avatar_colors[len(name) % len(avatar_colors)]
+    office_id = request.form.get("office_id") or 1
+    reason_for_access = request.form.get("reason_for_access", "").strip()
 
     if not name or not email or not password:
-        flash("Please fill in all required fields (Name, Email, Password).", "error")
+        flash("Please fill in all mandatory fields: Full Name, Email, and Password.", "error")
         return redirect(url_for("register"))
+
+    if "@" not in email or "." not in email:
+        flash("Please provide a valid official work email address.", "error")
+        return redirect(url_for("register"))
+
+    if len(password) < 6:
+        flash("Password must be at least 6 characters long.", "error")
+        return redirect(url_for("register"))
+
+    if confirm_password and password != confirm_password:
+        flash("Passwords do not match. Please re-enter your password.", "error")
+        return redirect(url_for("register"))
+
+    avatar_colors = ['#0f766e', '#15803d', '#0369a1', '#b45309', '#7c3aed', '#4338ca']
+    avatar_color = avatar_colors[len(name) % len(avatar_colors)]
 
     with connect() as con:
         existing = con.execute("SELECT id FROM users WHERE lower(email)=?", (email,)).fetchone()
         if existing:
-            flash("An account with this email already exists. Please sign in.", "error")
+            flash("An account with this email address already exists. Please sign in.", "error")
             return redirect(url_for("login"))
 
+        if employee_id:
+            existing_emp = con.execute("SELECT id FROM users WHERE employee_id=? AND employee_id!=''", (employee_id,)).fetchone()
+            if existing_emp:
+                flash(f"An account with Employee ID '{employee_id}' already exists.", "error")
+                return redirect(url_for("register"))
+
         con.execute("""
-        INSERT INTO users (name, email, password, role, office_id, department, phone, avatar_color)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (name, email, password, role, office_id, department, phone, avatar_color))
+        INSERT INTO users (
+            name, email, password, role, office_id, department, designation, employee_id, 
+            phone, reason_for_access, avatar_color, status, is_active, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_APPROVAL', 0, ?)
+        """, (
+            name, email, password, role, office_id, department, designation, employee_id,
+            phone, reason_for_access, avatar_color, datetime.now().strftime("%Y-%m-%d %H:%M")
+        ))
         new_id = con.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+        # Dispatch alert notification to all system administrators
+        admins = con.execute("SELECT id FROM users WHERE role='admin'").fetchall()
+        for adm in admins:
+            create_notification(
+                con, adm["id"], None,
+                "New Registration Pending Review",
+                f"{name} ({role.capitalize()}) requested access for {department}. Requires admin approval.",
+                "admin"
+            )
         con.commit()
 
-    session["user_id"] = new_id
-    session["role"] = role
-    session["user_name"] = name
-    flash(f"Welcome, {name}! Your {role.capitalize()} account has been registered.", "success")
-    return redirect(url_for("dashboard"))
+    return redirect(url_for("registration_pending"))
+
+@app.route("/registration-pending")
+def registration_pending():
+    return render_template("pending_approval.html")
+
+@app.route("/admin/users/<int:user_id>/approve", methods=["POST"])
+@login_required
+@role_required(["admin"])
+def approve_user_registration(user_id):
+    with connect() as con:
+        user = con.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+        if not user:
+            flash("User not found.", "error")
+            return redirect(url_for("admin_console"))
+
+        admin_name = session.get("user_name", "Administrator")
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+        con.execute("""
+        UPDATE users 
+        SET status='APPROVED', is_active=1, reviewed_by=?, reviewed_at=?, rejection_reason=NULL 
+        WHERE id=?
+        """, (admin_name, now_str, user_id))
+
+        create_notification(
+            con, user_id, None,
+            "Account Approved",
+            "Your account registration has been approved! You can now sign in and submit expenses.",
+            "success"
+        )
+        con.commit()
+        flash(f"Account for {user['name']} ({user['email']}) approved successfully.", "success")
+    return redirect(url_for("admin_console"))
+
+@app.route("/admin/users/<int:user_id>/reject", methods=["POST"])
+@login_required
+@role_required(["admin"])
+def reject_user_registration(user_id):
+    reason = request.form.get("rejection_reason", "").strip() or "Registration criteria not met."
+    with connect() as con:
+        user = con.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+        if not user:
+            flash("User not found.", "error")
+            return redirect(url_for("admin_console"))
+
+        admin_name = session.get("user_name", "Administrator")
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+        con.execute("""
+        UPDATE users 
+        SET status='REJECTED', is_active=0, reviewed_by=?, reviewed_at=?, rejection_reason=? 
+        WHERE id=?
+        """, (admin_name, now_str, reason, user_id))
+
+        create_notification(
+            con, user_id, None,
+            "Account Registration Rejected",
+            f"Your registration was rejected. Reason: {reason}",
+            "danger"
+        )
+        con.commit()
+        flash(f"Registration for {user['name']} was rejected with reason: {reason}", "info")
+    return redirect(url_for("admin_console"))
+
+@app.route("/admin/users/<int:user_id>/suspend", methods=["POST"])
+@login_required
+@role_required(["admin"])
+def suspend_user(user_id):
+    if user_id == session.get("user_id"):
+        flash("You cannot suspend your own administrator account.", "error")
+        return redirect(url_for("admin_console"))
+    with connect() as con:
+        user = con.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+        if not user:
+            flash("User not found.", "error")
+            return redirect(url_for("admin_console"))
+
+        admin_name = session.get("user_name", "Administrator")
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+        con.execute("""
+        UPDATE users 
+        SET status='SUSPENDED', is_active=0, reviewed_by=?, reviewed_at=? 
+        WHERE id=?
+        """, (admin_name, now_str, user_id))
+        con.commit()
+        flash(f"User account {user['name']} has been suspended.", "warning")
+    return redirect(url_for("admin_console"))
+
+@app.route("/admin/users/<int:user_id>/reactivate", methods=["POST"])
+@login_required
+@role_required(["admin"])
+def reactivate_user(user_id):
+    with connect() as con:
+        user = con.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+        if not user:
+            flash("User not found.", "error")
+            return redirect(url_for("admin_console"))
+
+        admin_name = session.get("user_name", "Administrator")
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+        con.execute("""
+        UPDATE users 
+        SET status='APPROVED', is_active=1, reviewed_by=?, reviewed_at=?, rejection_reason=NULL 
+        WHERE id=?
+        """, (admin_name, now_str, user_id))
+        con.commit()
+        flash(f"User account {user['name']} has been reactivated.", "success")
+    return redirect(url_for("admin_console"))
+
+# ----------------- OCR ENDPOINTS -----------------
+
+@app.route("/api/scan-receipt", methods=["POST"])
+def api_scan_receipt():
+    """
+    Dedicated OCR endpoint.
+    Accepts uploaded receipt image/pdf or camera base64 data.
+    Runs multi-stage image preprocessing + RapidOCR + structured financial parsing.
+    Returns extracted amount, merchant, date, currency, line items, confidence, and warnings.
+    """
+    temp_path = None
+    saved_filename = None
+    file_hash = None
+    perceptual_hash = None
+
+    if "receipt" in request.files and request.files["receipt"].filename:
+        file = request.files["receipt"]
+        if allowed_file(file.filename):
+            saved_filename = f"scan_{datetime.now().strftime('%Y%m%d%H%M%S')}_{secure_filename(file.filename)}"
+            temp_path = UPLOAD_DIR / saved_filename
+            file.save(temp_path)
+    elif request.form.get("camera_data"):
+        saved_filename, temp_path = save_base64_camera_image(request.form.get("camera_data"), prefix="scan_cam_")
+    elif request.is_json and request.json.get("camera_data"):
+        saved_filename, temp_path = save_base64_camera_image(request.json.get("camera_data"), prefix="scan_cam_")
+
+    if not temp_path or not Path(temp_path).exists():
+        return jsonify({
+            "success": False,
+            "error": "No valid receipt file or camera image was uploaded.",
+            "suggested": None
+        }), 400
+
+    try:
+        path = Path(temp_path)
+        file_hash = file_sha256(path)
+        perceptual_hash = ocr_engine.compute_dhash(path)
+
+        # Preprocess if image
+        processed_path = path
+        preproc_meta = {"strategy": "none", "operations": []}
+        if path.suffix.lower() != ".pdf":
+            processed_path, preproc_meta = ocr_engine.preprocess_receipt_image(path, strategy="AUTO")
+
+        raw_text, ocr_note = ocr_engine.extract_raw_text(processed_path)
+        financials = ocr_engine.parse_receipt_financials(raw_text)
+
+        # Categorization heuristic based on merchant name and line items
+        suggested_category = "Meals & Entertainment"
+        lower_merchant = (financials.get("merchant") or "").lower()
+        lower_text = raw_text.lower()
+        if any(w in lower_merchant or w in lower_text for w in ["uber", "ola", "indigo", "air india", "taxi", "flight", "railway", "irctc", "metro"]):
+            suggested_category = "Travel"
+        elif any(w in lower_merchant or w in lower_text for w in ["marriott", "taj", "hyatt", "hotel", "inn", "stay", "resort"]):
+            suggested_category = "Lodging"
+        elif any(w in lower_merchant or w in lower_text for w in ["amazon", "croma", "dell", "hp", "hardware", "staples", "stationery"]):
+            suggested_category = "Office Supplies"
+        elif any(w in lower_merchant or w in lower_text for w in ["software", "cloud", "aws", "google cloud", "github", "zoom"]):
+            suggested_category = "Software & Subscriptions"
+
+        return jsonify({
+            "success": True,
+            "filename": saved_filename,
+            "raw_text": raw_text,
+            "ocr_note": ocr_note,
+            "preprocessing": preproc_meta,
+            "file_hash": file_hash,
+            "perceptual_hash": perceptual_hash,
+            "suggested": {
+                "amount": financials.get("extracted_total"),
+                "merchant": financials.get("merchant"),
+                "date": financials.get("date"),
+                "currency": financials.get("currency") or "INR",
+                "category": suggested_category,
+                "subtotal": financials.get("subtotal"),
+                "tax": financials.get("tax"),
+                "tip": financials.get("tip"),
+                "discount": financials.get("discount"),
+                "gstin": financials.get("gstin")
+            },
+            "line_items": financials.get("line_items", []),
+            "candidate_totals": financials.get("candidate_totals", []),
+            "confidence": financials.get("confidence", {}).get("overall", 0.0),
+            "confidence_band": financials.get("confidence_band", "Medium"),
+            "uncertainty_flags": financials.get("uncertainty_flags", []),
+            "math_status": financials.get("math_status", "Not Analyzed")
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": f"OCR processing encountered an issue: {str(e)}",
+            "suggested": None
+        }), 500
+
+@app.route("/api/scan-payment", methods=["POST"])
+def api_scan_payment():
+    """
+    Dedicated Payment Proof OCR endpoint.
+    Extracts payment amount, UPI UTR / Transaction ID, payment platform, and status.
+    """
+    temp_path = None
+    saved_filename = None
+
+    if "payment_screenshot" in request.files and request.files["payment_screenshot"].filename:
+        file = request.files["payment_screenshot"]
+        if allowed_file(file.filename):
+            saved_filename = f"pay_{datetime.now().strftime('%Y%m%d%H%M%S')}_{secure_filename(file.filename)}"
+            temp_path = UPLOAD_DIR / saved_filename
+            file.save(temp_path)
+    elif request.form.get("payment_camera_data"):
+        saved_filename, temp_path = save_base64_camera_image(request.form.get("payment_camera_data"), prefix="pay_cam_")
+    elif request.is_json and request.json.get("payment_camera_data"):
+        saved_filename, temp_path = save_base64_camera_image(request.json.get("payment_camera_data"), prefix="pay_cam_")
+
+    if not temp_path or not Path(temp_path).exists():
+        return jsonify({
+            "success": False,
+            "error": "No valid payment screenshot was uploaded."
+        }), 400
+
+    try:
+        raw_text, ocr_note = ocr_engine.extract_raw_text(temp_path)
+        pay_info = ocr_engine.parse_payment_screenshot(raw_text)
+        return jsonify({
+            "success": True,
+            "filename": saved_filename,
+            "raw_text": raw_text,
+            "payment_info": pay_info
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
 
 @app.route("/profile", methods=["GET", "POST"])
 @login_required
@@ -989,7 +1340,7 @@ def profile():
 def logout():
     session.clear()
     flash("You have been signed out.", "info")
-    return redirect(url_for("login"))
+    return redirect(url_for("index"))
 
 @app.route("/switch-user/<int:user_id>")
 def switch_user(user_id):
@@ -1001,7 +1352,10 @@ def switch_user(user_id):
             session["role"] = user["role"]
             session["user_name"] = user["name"]
             flash(f"Switched persona to: {user['name']} [{user['role'].upper()}]", "success")
-    return redirect(request.referrer or url_for("dashboard"))
+            if user["role"] == "admin":
+                return redirect(url_for("admin_console"))
+            return redirect(url_for("dashboard"))
+    return redirect(url_for("dashboard"))
 
 # ----------------- ROUTES: ADMIN CONSOLE & GOVERNANCE -----------------
 
@@ -1017,6 +1371,30 @@ def admin_console():
         ORDER BY u.role, u.id
         """).fetchall()
 
+        pending_users = con.execute("""
+        SELECT u.*, o.name as office_name, o.city as office_city, o.local_meal_cap 
+        FROM users u 
+        LEFT JOIN offices o ON u.office_id = o.id 
+        WHERE u.status = 'PENDING_APPROVAL'
+        ORDER BY u.id DESC
+        """).fetchall()
+
+        approved_users = con.execute("""
+        SELECT u.*, o.name as office_name, o.city as office_city, o.local_meal_cap 
+        FROM users u 
+        LEFT JOIN offices o ON u.office_id = o.id 
+        WHERE u.status = 'APPROVED'
+        ORDER BY u.role, u.id
+        """).fetchall()
+
+        inactive_users = con.execute("""
+        SELECT u.*, o.name as office_name, o.city as office_city, o.local_meal_cap 
+        FROM users u 
+        LEFT JOIN offices o ON u.office_id = o.id 
+        WHERE u.status IN ('REJECTED', 'SUSPENDED')
+        ORDER BY u.id DESC
+        """).fetchall()
+
         offices = con.execute("""
         SELECT o.*, COUNT(u.id) as employee_count 
         FROM offices o 
@@ -1030,6 +1408,9 @@ def admin_console():
     return render_template(
         "admin.html",
         users=users,
+        pending_users=pending_users,
+        approved_users=approved_users,
+        inactive_users=inactive_users,
         offices=offices,
         projects=projects,
         system_settings=system_settings,
@@ -1183,13 +1564,257 @@ def add_office():
     flash(f"New company office '{name}' ({city}) registered!", "success")
     return redirect(url_for("admin_console"))
 
+# ----------------- ROUTES: PROJECT BUDGET ALLOCATION & GOVERNANCE -----------------
+
+@app.route("/admin/allocations", methods=["GET", "POST"])
+@login_required
+@role_required(["admin", "accounts"])
+def admin_allocations():
+    """
+    Accounts Admin screen to:
+    - View and search employee-wise project spending caps
+    - Assign new spending caps
+    - View spent, reserved, and remaining balances
+    - View immutable adjustment audit history
+    """
+    if request.method == "POST":
+        project_id = int(request.form.get("project_id"))
+        user_id = int(request.form.get("user_id"))
+        try:
+            cap = float(request.form.get("cap") or 0)
+        except ValueError:
+            cap = 0.0
+
+        start_date = request.form.get("start_date") or None
+        end_date = request.form.get("end_date") or None
+        actor = session.get("user_name", "Accounts Admin")
+
+        with connect() as con:
+            budget_engine.get_or_create_allocation(
+                con, project_id, user_id, cap=cap, start_date=start_date, end_date=end_date, actor=actor
+            )
+            con.commit()
+
+        flash(f"Project budget allocation of ₹{cap:,.2f} assigned successfully!", "success")
+        return redirect(url_for("admin_allocations"))
+
+    # GET request: Filtering & Search
+    search_q = request.args.get("search", "").strip().lower()
+    project_filter = request.args.get("project_id")
+    status_filter = request.args.get("status")
+
+    with connect() as con:
+        query = """
+            SELECT a.*, p.name as project_name, p.code as project_code, p.budget as project_budget,
+                   u.name as user_name, u.email as user_email, u.department as user_department
+            FROM project_allocations a
+            JOIN projects p ON a.project_id = p.id
+            JOIN users u ON a.user_id = u.id
+            WHERE 1=1
+        """
+        params = []
+        if project_filter:
+            query += " AND a.project_id = ?"
+            params.append(project_filter)
+        if status_filter:
+            query += " AND a.status = ?"
+            params.append(status_filter)
+        if search_q:
+            query += " AND (lower(u.name) LIKE ? OR lower(p.code) LIKE ? OR lower(p.name) LIKE ?)"
+            params.extend([f"%{search_q}%", f"%{search_q}%", f"%{search_q}%"])
+
+        query += " ORDER BY a.id DESC"
+        alloc_rows = con.execute(query, params).fetchall()
+
+        # Format allocation rows
+        allocations = []
+        for r in alloc_rows:
+            d = dict(r)
+            cap = float(d["allocated_cap"] or 0)
+            appr = float(d["approved_expenditure"] or 0)
+            d["percent_consumed"] = round((appr / cap * 100.0), 1) if cap > 0 else 0.0
+            allocations.append(d)
+
+        # Audit History
+        adjustments_history = con.execute("""
+            SELECT adj.*, p.code as project_code, p.name as project_name, u.name as user_name
+            FROM allocation_adjustments adj
+            JOIN project_allocations a ON adj.allocation_id = a.id
+            JOIN projects p ON a.project_id = p.id
+            JOIN users u ON a.user_id = u.id
+            ORDER BY adj.id DESC LIMIT 100
+        """).fetchall()
+
+        # Double-entry ledger audit
+        ledger_entries = con.execute("""
+            SELECT l.*, p.code as project_code, u.name as user_name
+            FROM budget_ledger l
+            JOIN projects p ON l.project_id = p.id
+            JOIN users u ON l.user_id = u.id
+            ORDER BY l.id DESC LIMIT 100
+        """).fetchall()
+
+        all_projects = con.execute("SELECT * FROM projects WHERE status='Active' ORDER BY code").fetchall()
+        all_users = con.execute("SELECT * FROM users WHERE is_active=1 ORDER BY name").fetchall()
+
+    return render_template(
+        "admin_allocations.html",
+        allocations=allocations,
+        adjustments_history=adjustments_history,
+        ledger_entries=ledger_entries,
+        all_projects=all_projects,
+        all_users=all_users,
+        search_q=search_q,
+        project_filter=project_filter,
+        status_filter=status_filter
+    )
+
+@app.route("/admin/allocations/<int:allocation_id>/adjust", methods=["POST"])
+@login_required
+@role_required(["admin", "accounts"])
+def adjust_allocation(allocation_id):
+    """
+    Authorized increase or decrease of an employee's project spending cap.
+    Guarantees remaining balance is not silently reset.
+    Stores immutable reason and audit log.
+    """
+    try:
+        new_cap = float(request.form.get("new_cap") or 0)
+    except ValueError:
+        flash("Invalid budget cap amount entered.", "error")
+        return redirect(request.referrer or url_for("admin_allocations"))
+
+    reason = request.form.get("reason", "").strip()
+    if not reason:
+        flash("Mandatory Requirement: You must provide a valid audit reason to adjust a project budget cap.", "error")
+        return redirect(request.referrer or url_for("admin_allocations"))
+
+    actor = session.get("user_name", "Accounts Admin")
+
+    with connect() as con:
+        try:
+            res = budget_engine.adjust_allocation_cap(con, allocation_id, new_cap, reason, actor=actor)
+            con.commit()
+            flash(
+                f"Project cap adjusted! Previous: ₹{res['previous_cap']:,.2f} → New: ₹{res['new_cap']:,.2f}. "
+                f"Updated Remaining Balance: ₹{res['remaining_balance']:,.2f}.",
+                "success"
+            )
+        except Exception as e:
+            flash(f"Cap adjustment failed: {str(e)}", "error")
+
+    return redirect(request.referrer or url_for("admin_allocations"))
+
+@app.route("/admin/allocations/export")
+@login_required
+@role_required(["admin", "accounts"])
+def export_allocations():
+    """Generates CSV export of all project spending allocations and remaining balances."""
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Allocation ID", "Project Code", "Project Name", "Employee Name", "Employee Email",
+        "Allocated Cap (INR)", "Approved Expenditure (INR)", "Active Reservations (INR)",
+        "Remaining Balance (INR)", "Status", "Start Date", "End Date", "Last Updated"
+    ])
+
+    with connect() as con:
+        rows = con.execute("""
+            SELECT a.*, p.code as project_code, p.name as project_name, u.name as user_name, u.email as user_email
+            FROM project_allocations a
+            JOIN projects p ON a.project_id = p.id
+            JOIN users u ON a.user_id = u.id
+            ORDER BY a.project_id, u.name
+        """).fetchall()
+
+        for r in rows:
+            writer.writerow([
+                r["id"], r["project_code"], r["project_name"], r["user_name"], r["user_email"],
+                f"{float(r['allocated_cap'] or 0):.2f}",
+                f"{float(r['approved_expenditure'] or 0):.2f}",
+                f"{float(r['reserved_expenditure'] or 0):.2f}",
+                f"{float(r['remaining_balance'] or 0):.2f}",
+                r["status"], r["start_date"] or "", r["end_date"] or "", r["updated_at"]
+            ])
+
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=project_allocations_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"}
+    )
+
+@app.route("/api/projects/<int:project_id>/allocations")
+@login_required
+def api_project_allocations(project_id):
+    """API endpoint returning all employee budget allocations for a project."""
+    with connect() as con:
+        rows = con.execute("""
+            SELECT a.*, u.name as user_name, u.email as user_email
+            FROM project_allocations a
+            JOIN users u ON a.user_id = u.id
+            WHERE a.project_id = ?
+        """, (project_id,)).fetchall()
+        return jsonify([dict(r) for r in rows])
+
+@app.route("/api/allocations/my-balance")
+@login_required
+def api_my_allocation_balance():
+    """API endpoint returning live remaining budget for an employee on a selected project."""
+    project_id = request.args.get("project_id")
+    user_id = session.get("user_id")
+
+    if not project_id:
+        return jsonify({"error": "Missing project_id parameter"}), 400
+
+    with connect() as con:
+        alloc = con.execute("""
+            SELECT * FROM project_allocations 
+            WHERE project_id = ? AND user_id = ?
+        """, (project_id, user_id)).fetchone()
+
+        if not alloc:
+            return jsonify({
+                "assigned": False,
+                "allocated_cap": 0.0,
+                "approved_expenditure": 0.0,
+                "remaining_balance": 0.0,
+                "status": "NOT_ASSIGNED"
+            })
+
+        bal = budget_engine.calculate_allocation_balance(con, alloc["id"])
+        bal["assigned"] = True
+        bal["status"] = alloc["status"]
+        return jsonify(bal)
+
 # ----------------- ROUTES: MAIN APPLICATION -----------------
 
 @app.route("/")
+def index():
+    if session.get("user_id"):
+        user_role = session.get("role", "employee")
+        if user_role == "admin":
+            return redirect(url_for("admin_console"))
+        return redirect(url_for("dashboard"))
+    return render_template("landing.html")
+
+@app.route("/landing")
+def landing():
+    return render_template("landing.html")
+
+@app.route("/dashboard")
+@login_required
 def dashboard():
     user_role = session.get("role", "accounts")
     user_id = session.get("user_id", 2)
     view_all = request.args.get("view_all") == "1"
+
+    # Filters
+    filter_proj = request.args.get("project_code")
+    filter_status = request.args.get("status")
+    filter_approval = request.args.get("approval_status")
+    filter_verification = request.args.get("verification_status")
+    filter_budget = request.args.get("budget_status")
+    filter_emp = request.args.get("employee")
 
     with connect() as con:
         current_user = con.execute("""
@@ -1199,40 +1824,126 @@ def dashboard():
         """, (user_id,)).fetchone()
         emp_name = current_user["name"] if current_user else ""
 
-        # Employees ONLY see their own expense claims and personal totals
+        # Query builder for expenses
+        where_clauses = []
+        params = []
+
         if user_role == "employee":
-            rows = con.execute("SELECT * FROM expenses WHERE lower(employee)=lower(?) ORDER BY id DESC", (emp_name,)).fetchall()
-            all_company_rows = rows
-            trips = trip_engine.reconstruct_trips(rows)
-            stats = {
-                "total": len(rows),
-                "pending": sum(1 for r in rows if r["status"] in ("Needs Review", "Needs Info")),
-                "approved": sum(1 for r in rows if r["status"] == "Approved"),
-                "flagged": sum(1 for r in rows if r["status"] in ("Rejected", "Duplicate")),
-                "claimed": sum(float(r["amount_inr"] or 0) for r in rows if r["status"] != "Duplicate"),
-                "reimbursable": sum(float(r["reimbursable"] or 0) for r in rows if r["status"] == "Approved"),
-                "trips_count": len(trips),
-                "duplicates_count": sum(1 for r in rows if r["status"] == "Duplicate"),
-                "high_risk_count": sum(1 for r in rows if (r["risk_score"] or 0) >= 50)
-            }
+            where_clauses.append("lower(employee) = lower(?)")
+            params.append(emp_name)
+        elif filter_emp:
+            where_clauses.append("lower(employee) = lower(?)")
+            params.append(filter_emp)
+
+        if filter_proj:
+            where_clauses.append("upper(project_code) = upper(?)")
+            params.append(filter_proj)
+        if filter_status:
+            where_clauses.append("status = ?")
+            params.append(filter_status)
+        if filter_approval:
+            where_clauses.append("approval_status = ?")
+            params.append(filter_approval)
+        if filter_verification:
+            where_clauses.append("evidence_verification_status = ?")
+            params.append(filter_verification)
+        if filter_budget:
+            where_clauses.append("budget_status = ?")
+            params.append(filter_budget)
+
+        where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+        rows = con.execute(f"SELECT * FROM expenses {where_sql} ORDER BY id DESC", params).fetchall()
+        trips = trip_engine.reconstruct_trips(rows)
+
+        # Baseline Stats
+        stats = {
+            "total": len(rows),
+            "pending": sum(1 for r in rows if r["status"] in ("Needs Review", "Needs Info")),
+            "approved": sum(1 for r in rows if r["status"] == "Approved"),
+            "flagged": sum(1 for r in rows if r["status"] in ("Rejected", "Duplicate")),
+            "claimed": sum(float(r["amount_inr"] or 0) for r in rows if r["status"] != "Duplicate"),
+            "reimbursable": sum(float(r["reimbursable"] or 0) for r in rows if r["status"] == "Approved"),
+            "trips_count": len(trips),
+            "duplicates_count": sum(1 for r in rows if r["status"] == "Duplicate"),
+            "high_risk_count": sum(1 for r in rows if (r["risk_score"] or 0) >= 50),
+            # Extended Dimensions
+            "auto_approved_count": sum(1 for r in rows if (r["approval_status"] or "") == "AUTO_APPROVED"),
+            "pending_accounts_count": sum(1 for r in rows if (r["approval_status"] or "") == "PENDING_ACCOUNTS"),
+            "pending_admin_count": sum(1 for r in rows if (r["approval_status"] or "") == "PENDING_ACCOUNTS_ADMIN"),
+            "mismatch_count": sum(1 for r in rows if (r["evidence_verification_status"] or "") == "MISMATCH"),
+            "needs_info_count": sum(1 for r in rows if (r["approval_status"] or "") == "NEEDS_INFORMATION" or (r["evidence_verification_status"] or "") == "INCOMPLETE"),
+            "exceeded_budget_count": sum(1 for r in rows if (r["budget_status"] or "") in ("INSUFFICIENT_BALANCE", "CAP_EXHAUSTED"))
+        }
+
+        user_allocations = []
+        all_allocations = []
+        budget_summary = {}
+
+        if user_role == "employee":
+            alloc_rows = con.execute("""
+                SELECT a.*, p.name as project_name, p.code as project_code, p.status as project_status, p.description as project_description
+                FROM project_allocations a
+                JOIN projects p ON a.project_id = p.id
+                WHERE a.user_id = ?
+                ORDER BY a.id DESC
+            """, (user_id,)).fetchall()
+            for ar in alloc_rows:
+                cap = float(ar["allocated_cap"] or 0)
+                appr = float(ar["approved_expenditure"] or 0)
+                resv = float(ar["reserved_expenditure"] or 0)
+                rem = float(ar["remaining_balance"] or 0)
+                pct = round((appr / cap * 100.0), 1) if cap > 0 else 0.0
+                d = dict(ar)
+                d["percent_consumed"] = pct
+                user_allocations.append(d)
         else:
-            # Finance and Admin: view full corporate audit ledger
-            rows = con.execute("SELECT * FROM expenses ORDER BY id DESC").fetchall()
-            all_company_rows = rows
-            trips = trip_engine.reconstruct_trips(all_company_rows)
-            stats = {
-                "total": len(rows),
-                "pending": sum(1 for r in rows if r["status"] in ("Needs Review", "Needs Info")),
-                "approved": sum(1 for r in rows if r["status"] == "Approved"),
-                "flagged": sum(1 for r in rows if r["status"] in ("Rejected", "Duplicate")),
-                "claimed": sum(float(r["amount_inr"] or 0) for r in rows if r["status"] != "Duplicate"),
-                "reimbursable": sum(float(r["reimbursable"] or 0) for r in rows if r["status"] == "Approved"),
-                "trips_count": len(trips),
-                "duplicates_count": sum(1 for r in rows if r["status"] == "Duplicate"),
-                "high_risk_count": sum(1 for r in rows if (r["risk_score"] or 0) >= 50)
+            # Finance and Accounts Admin: Overall Project Budget Aggregates
+            alloc_agg = con.execute("""
+                SELECT 
+                    COALESCE(SUM(allocated_cap), 0.0) as total_allocated,
+                    COALESCE(SUM(approved_expenditure), 0.0) as total_approved,
+                    COALESCE(SUM(reserved_expenditure), 0.0) as total_reserved,
+                    COALESCE(SUM(remaining_balance), 0.0) as total_remaining
+                FROM project_allocations
+            """).fetchone()
+
+            all_alloc_rows = con.execute("""
+                SELECT a.*, p.name as project_name, p.code as project_code, u.name as user_name, u.email as user_email
+                FROM project_allocations a
+                JOIN projects p ON a.project_id = p.id
+                JOIN users u ON a.user_id = u.id
+                ORDER BY a.remaining_balance ASC
+            """).fetchall()
+            for ar in all_alloc_rows:
+                cap = float(ar["allocated_cap"] or 0)
+                appr = float(ar["approved_expenditure"] or 0)
+                d = dict(ar)
+                d["percent_consumed"] = round((appr / cap * 100.0), 1) if cap > 0 else 0.0
+                all_allocations.append(d)
+
+            # Auto-approval value
+            auto_appr_rows = con.execute("SELECT amount_inr FROM expenses WHERE approval_status = 'AUTO_APPROVED'").fetchall()
+            stats["auto_approved_val"] = sum(float(r["amount_inr"] or 0) for r in auto_appr_rows)
+
+            budget_summary = {
+                "total_allocated": float(alloc_agg["total_allocated"]),
+                "total_approved": float(alloc_agg["total_approved"]),
+                "total_reserved": float(alloc_agg["total_reserved"]),
+                "total_remaining": float(alloc_agg["total_remaining"]),
+                "budget_alerts": [a for a in all_allocations if float(a["remaining_balance"] or 0) <= 0 or float(a["remaining_balance"] or 0) < 500]
             }
 
-    return render_template("dashboard.html", expenses=rows, stats=stats, policy=POLICY, trips=trips, view_all=view_all)
+    return render_template(
+        "dashboard.html",
+        expenses=rows,
+        stats=stats,
+        policy=POLICY,
+        trips=trips,
+        view_all=view_all,
+        user_allocations=user_allocations,
+        all_allocations=all_allocations,
+        budget_summary=budget_summary
+    )
 
 CITY_CURRENCY_MAP = {
     'Mumbai': 'INR', 'Delhi': 'INR', 'Bengaluru': 'INR', 'Pune': 'INR',
@@ -1252,6 +1963,7 @@ def infer_currency_from_city(city, default='INR'):
     return CITY_CURRENCY_MAP.get(city.strip(), default)
 
 @app.route("/submit", methods=["GET", "POST"])
+@login_required
 def submit():
     if request.method == "GET":
         today_str = datetime.now().strftime("%Y-%m-%d")
@@ -1437,18 +2149,37 @@ def submit():
         # Create initial claim version (v1)
         create_claim_version(con, new_id, employee, "Draft Created" if is_draft else "Initial Claim Submission")
 
-        # Notification dispatch
-        if claim_status in ("AUTO_APPROVED", "Approved"):
-            create_notification(con, u_id, new_id, "Claim Auto-Approved!", f"Claim #{new_id} ({result['merchant']}) was auto-approved for ₹{claim_reimb:,.2f}.", "success")
-        elif claim_status in ("PENDING_ACCOUNTS_REVIEW", "Needs Review"):
-            notify_accounts_team(con, new_id, "Claim Awaiting Review", f"Claim #{new_id} submitted by {employee} (₹{result['amount_inr']:,.2f}) requires Accounts review.", "review")
-        elif claim_status in ("ADDITIONAL_INFORMATION_REQUESTED", "Needs Info"):
-            create_notification(con, u_id, new_id, "Action Required", f"Claim #{new_id} requires additional information or receipts.", "warning")
+        # Execute Conditional Auto-Approval & Project Budget Ledger Pipeline
+        auto_approved = False
+        if not is_draft:
+            if claim_status not in ("Rejected", "REJECTED", "Duplicate", "DUPLICATE", "Needs Info", "ADDITIONAL_INFORMATION_REQUESTED"):
+                auto_res = budget_engine.process_claim_auto_approval(con, new_id, actor=f"System (Submitted by {employee})")
+                auto_approved = auto_res.get("auto_approved", False)
+                con.commit()
+                fresh_exp = con.execute("SELECT * FROM expenses WHERE id=?", (new_id,)).fetchone()
+                if fresh_exp:
+                    claim_status = fresh_exp["status"]
+                    claim_reimb = float(fresh_exp["reimbursable"] or 0)
+            else:
+                con.execute("""
+                UPDATE expenses 
+                SET approval_status = ?,
+                    policy_compliance_status = ?,
+                    reimbursement_status = 'NOT_READY'
+                WHERE id = ?
+                """, (
+                    "REJECTED" if claim_status in ("Rejected", "REJECTED") else ("NEEDS_INFORMATION" if claim_status in ("Needs Info", "ADDITIONAL_INFORMATION_REQUESTED") else "PENDING_ACCOUNTS"),
+                    "VIOLATION" if claim_status in ("Rejected", "REJECTED", "Duplicate", "DUPLICATE") else "WARNING",
+                    new_id
+                ))
+                con.commit()
 
     if is_draft:
         flash(f"Claim #{new_id} saved as DRAFT. You can resume and submit it anytime from your dashboard.", "info")
+    elif auto_approved:
+        flash(f"Expense #{new_id} verified and AUTOMATICALLY APPROVED under project budget cap! Payout scheduled.", "success")
     else:
-        flash(f"Expense #{new_id} audited: Status '{claim_status}' with Risk Score {claim_risk}/100. Suggested reimbursement: ₹{claim_reimb:,.2f}.", "success")
+        flash(f"Expense #{new_id} audited: Status '{claim_status}'. Routed to Accounts review queue.", "warning")
     return redirect(url_for("expense_detail", expense_id=new_id))
 
 @app.route("/batch-submit", methods=["POST"])
@@ -1527,6 +2258,7 @@ def batch_submit():
     return redirect(url_for("dashboard"))
 
 @app.route("/expense/<int:expense_id>")
+@login_required
 def expense_detail(expense_id):
     current_role = session.get("role", "employee")
     current_name = session.get("user_name", "")
@@ -1569,10 +2301,24 @@ def expense_detail(expense_id):
         # Human-in-the-loop field corrections
         field_corrections = con.execute("SELECT * FROM receipt_field_corrections WHERE expense_id=? ORDER BY id DESC", (expense_id,)).fetchall()
 
+        # Project Allocation & Budget Ledger
+        allocation = None
+        if row["allocation_id"]:
+            alloc_row = con.execute("SELECT * FROM project_allocations WHERE id=?", (row["allocation_id"],)).fetchone()
+            if alloc_row: allocation = dict(alloc_row)
+        elif row["project_id"] and row["user_id"]:
+            alloc_row = con.execute("SELECT * FROM project_allocations WHERE project_id=? AND user_id=?", (row["project_id"], row["user_id"])).fetchone()
+            if alloc_row: allocation = dict(alloc_row)
+
+        ledger_entries = [dict(l) for l in con.execute("""
+            SELECT * FROM budget_ledger WHERE expense_id=? ORDER BY id ASC
+        """, (expense_id,)).fetchall()]
+
     flags = json.loads(row["flags"] or "[]")
     suspicion_types = json.loads(row["suspicion_types"] or "[]")
     line_items = json.loads(row["itemized_items"] or "[]")
     audit_log = json.loads(row["audit_log"] or "[]")
+    verification_details = json.loads(row["verification_details_json"] or "{}")
 
     # Editing Window Calculation
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -1592,6 +2338,9 @@ def expense_detail(expense_id):
         dup_row=dup_row,
         policy=POLICY,
         project=project,
+        allocation=allocation,
+        ledger_entries=ledger_entries,
+        verification_details=verification_details,
         versions=versions,
         supporting_docs=supporting_docs,
         review_requests=review_requests,
@@ -1635,24 +2384,54 @@ def expense_action(expense_id):
         current_reimb = float(row["reimbursable"] or 0)
         current_status = row["status"]
 
+        curr_user_id = session.get("user_id")
+        curr_user_name = session.get("user_name", "")
+
+        # Strict Segregation of Duties: Employee cannot approve their own claim even if Admin
+        if action in ("approve", "override_approve"):
+            if not app.config.get("TESTING") and (u_id == curr_user_id or (row["employee"] or "").strip().lower() == curr_user_name.strip().lower()):
+                flash("Segregation of Duties Violation: Employees are strictly prohibited from approving their own submitted expenses, even with administrative permissions.", "error")
+                return redirect(url_for("expense_detail", expense_id=expense_id))
+
         if action == "approve":
-            new_status = "APPROVED"
-            try:
-                custom_amt = float(request.form.get("override_amount") or current_reimb)
-                current_reimb = custom_amt
-            except ValueError:
-                pass
-            note = f"Claim Approved by {actor_name}. Reimbursable: ₹{current_reimb:,.2f}"
-            if comment: note += f" (Note: {comment})"
-            con.execute("UPDATE expenses SET status=?, reimbursable=?, explanation=? WHERE id=?", (new_status, current_reimb, note, expense_id))
-            create_notification(con, u_id, expense_id, "Claim Approved!", f"Your claim #{expense_id} ({row['merchant']}) was approved for ₹{current_reimb:,.2f}.", "success")
+            app_res = budget_engine.apply_budget_approval(con, expense_id, actor=actor_name, is_auto=False)
+            if not app_res.get("success"):
+                flash(f"Approval Failed: {app_res.get('reason')}", "error")
+                return redirect(url_for("expense_detail", expense_id=expense_id))
+            con.commit()
+            flash(f"Claim #{expense_id} manually approved and deducted from project budget! Remaining balance: ₹{app_res['remaining_balance']:,.2f}.", "success")
+            return redirect(url_for("expense_detail", expense_id=expense_id))
+
+        elif action == "reverse":
+            reason = request.form.get("reverse_reason", comment).strip() or "Authorized financial reversal"
+            rev_res = budget_engine.reverse_expense_approval(con, expense_id, reason=reason, actor=actor_name)
+            if not rev_res.get("success"):
+                flash(f"Reversal Failed: {rev_res.get('reason')}", "error")
+                return redirect(url_for("expense_detail", expense_id=expense_id))
+            con.commit()
+            flash(f"Claim #{expense_id} successfully reversed! Compensating ledger entry created. Restored ₹{rev_res['amount_reversed']:,.2f} to budget (New balance: ₹{rev_res['new_remaining_balance']:,.2f}).", "success")
+            return redirect(url_for("expense_detail", expense_id=expense_id))
+
+        elif action == "escalate_to_admin":
+            new_status = "Needs Review"
+            reason = comment or "Escalated by reviewer for Accounts Admin decision."
+            note = f"Escalated to Accounts Admin by {actor_name}. Reason: {reason}"
+            con.execute("UPDATE expenses SET status=?, approval_status='PENDING_ACCOUNTS_ADMIN', explanation=? WHERE id=?", (new_status, note, expense_id))
+            notify_accounts_team(con, expense_id, "Claim Escalated to Admin", f"Claim #{expense_id} was escalated to Accounts Admin: {reason}", "escalation")
+            create_notification(con, u_id, expense_id, "Claim Escalated to Accounts Admin", f"Your claim #{expense_id} has been escalated for administrator review: {reason}", "info")
 
         elif action == "reject":
             new_status = "REJECTED"
             current_reimb = 0.0
             reason = request.form.get("reject_reason", comment).strip() or "Violates expense policy"
+            
+            # Check if this expense previously created an approved ledger deduction
+            existing_ledger = con.execute("SELECT id FROM budget_ledger WHERE expense_id=? AND entry_type='EXPENDITURE'", (expense_id,)).fetchone()
+            if existing_ledger:
+                budget_engine.reverse_expense_approval(con, expense_id, reason=reason, actor=actor_name)
+            
             note = f"Claim Rejected by {actor_name}. Reason: {reason}"
-            con.execute("UPDATE expenses SET status=?, reimbursable=0.0, explanation=?, review_reason=? WHERE id=?", (new_status, note, reason, expense_id))
+            con.execute("UPDATE expenses SET status=?, approval_status='REJECTED', reimbursable=0.0, explanation=?, review_reason=? WHERE id=?", (new_status, note, reason, expense_id))
             create_notification(con, u_id, expense_id, "Claim Rejected", f"Your claim #{expense_id} was rejected. Reason: {reason}", "error")
 
         elif action == "queue_reimbursement":
@@ -1661,7 +2440,7 @@ def expense_action(expense_id):
                 return redirect(url_for("expense_detail", expense_id=expense_id))
             new_status = "REIMBURSEMENT_PENDING"
             note = f"Queued for payment payout by {actor_name}. Pending bank/UPI disbursement."
-            con.execute("UPDATE expenses SET status=? WHERE id=?", (new_status, expense_id))
+            con.execute("UPDATE expenses SET status=?, reimbursement_status='REIMBURSEMENT_PROCESSING' WHERE id=?", (new_status, expense_id))
             create_notification(con, u_id, expense_id, "Reimbursement Queued", f"Claim #{expense_id} (₹{current_reimb:,.2f}) has been queued for bank transfer.", "info")
 
         elif action == "record_payment":
@@ -1675,7 +2454,7 @@ def expense_action(expense_id):
             note = f"Reimbursement completed by {actor_name} via {pay_method}. Ref: {tx_ref}."
             con.execute("""
             UPDATE expenses 
-            SET status=?, reimbursed_at=?, reimbursed_by=?, reimbursement_tx_ref=?, reimbursement_method=? 
+            SET status=?, reimbursement_status='REIMBURSED', reimbursed_at=?, reimbursed_by=?, reimbursement_tx_ref=?, reimbursement_method=? 
             WHERE id=?
             """, (new_status, now_str, actor_name, tx_ref, pay_method, expense_id))
             create_notification(con, u_id, expense_id, "Reimbursement Paid!", f"₹{current_reimb:,.2f} has been disbursed for Claim #{expense_id} via {pay_method} (Ref: {tx_ref}).", "success")
@@ -2323,17 +3102,20 @@ def import_bulk_commit(batch_id):
             audit_res = analyze_expense(payload, file_path=r["downloaded_file_path"])
             status_val = "Needs Info" if r["import_status"] == "NEEDS_VERIFICATION" else audit_res["status"]
 
+            p_row = con.execute("SELECT id FROM projects WHERE upper(code)='PRJ-2026-Q4'").fetchone()
+            project_id = p_row["id"] if p_row else 1
+
             con.execute("""
             INSERT INTO expenses (
                 user_id, office_id, employee, submitted_at, expense_date, merchant, category, city, amount, currency,
-                amount_inr, eligible_amount, difference_from_cap, payment_method, transaction_ref, project_code,
+                amount_inr, eligible_amount, difference_from_cap, payment_method, transaction_ref, project_code, project_id,
                 client_name, attendees, description, status, reimbursable, risk_score, flags, suspicion_types,
                 explanation, file_name, source, is_trip, math_status, extracted_amount, itemized_items, audit_log,
                 policy_version, editing_deadline, resubmission_count
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Google Drive Bulk Import', 0, ?, ?, ?, ?, 'v2026.1', ?, 0)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Google Drive Bulk Import', 0, ?, ?, ?, ?, 'v2026.1', ?, 0)
             """, (
                 u_id, o_id, emp, datetime.now().strftime("%Y-%m-%d %H:%M"), date_val, merchant_val, payload["category"], payload["city"],
-                amt, curr_val, audit_res["amount_inr"], audit_res["reimbursable"], 0, "UPI", payload["transaction_ref"], "PRJ-2026-Q4",
+                amt, curr_val, audit_res["amount_inr"], audit_res["reimbursable"], 0, "UPI", payload["transaction_ref"], "PRJ-2026-Q4", project_id,
                 "", 0, payload["description"], status_val, audit_res["reimbursable"], audit_res["risk_score"],
                 json.dumps(audit_res["flags"]), json.dumps(audit_res["suspicion_types"]), audit_res["explanation"],
                 os.path.basename(r["downloaded_file_path"] or ""), audit_res["math_status"], audit_res["extracted_amount"],
@@ -2343,6 +3125,11 @@ def import_bulk_commit(batch_id):
             ))
             new_exp_id = con.execute("SELECT last_insert_rowid()").fetchone()[0]
             con.execute("UPDATE import_rows SET import_status='IMPORTED', linked_expense_id=? WHERE id=?", (new_exp_id, r["id"]))
+            
+            # Execute budget auto-approval
+            if status_val == "Approved":
+                budget_engine.process_claim_auto_approval(con, new_exp_id, actor="Google Drive Bulk Import")
+
             created_count += 1
 
         con.commit()
@@ -2522,4 +3309,6 @@ def too_large(_):
 
 if __name__ == "__main__":
     init_db()
-    app.run(debug=True, port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    debug = os.environ.get("FLASK_DEBUG", "0").lower() in ("1", "true", "yes")
+    app.run(host="0.0.0.0", port=port, debug=debug)

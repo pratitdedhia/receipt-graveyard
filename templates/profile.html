@@ -173,7 +173,7 @@
         <th>REIMBURSABLE</th>
         <th>RISK SCORE</th>
         <th>STATUS</th>
-        <th>ACTIONS</th>
+        <th class="th-action">ACTIONS</th>
       </tr>
     </thead>
     <tbody>
@@ -205,8 +205,10 @@
           </span>
         </td>
         <td class="action-cell">
-          <a href="{{ url_for('expense_detail', expense_id=c.id) }}" class="btn-action">View Details →</a>
-          <a href="{{ url_for('expense_voucher', expense_id=c.id) }}" target="_blank" class="btn-action-icon" title="Print Voucher">🖨</a>
+          <div class="action-buttons-group">
+            <a href="{{ url_for('expense_detail', expense_id=c.id) }}" class="btn-action">View Details →</a>
+            <a href="{{ url_for('expense_voucher', expense_id=c.id) }}" target="_blank" class="btn-action-icon" title="Print Voucher">🖨</a>
+          </div>
         </td>
       </tr>
       {% else %}

@@ -84,6 +84,42 @@
   </div>
 </section>
 
+<!-- Extra Status Counters (Auto-Approved, In Accounts Review, Escalated to Admin, Discrepancies) -->
+<div class="metrics-grid" style="margin-top: 24px; margin-bottom: 24px;">
+  <div class="metric-card">
+    <div class="metric-head">
+      <span class="metric-label">AUTO-APPROVED</span>
+      <span class="metric-icon">⚡</span>
+    </div>
+    <div class="metric-value color-green">{{ stats.auto_approved_count }}</div>
+    <div class="metric-sub">100% verified & budget deducted</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-head">
+      <span class="metric-label">IN ACCOUNTS REVIEW</span>
+      <span class="metric-icon">⚖️</span>
+    </div>
+    <div class="metric-value color-amber">{{ stats.pending_accounts_count }}</div>
+    <div class="metric-sub">Routine verification queue</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-head">
+      <span class="metric-label">ADMIN ESCALATION</span>
+      <span class="metric-icon">🛡️</span>
+    </div>
+    <div class="metric-value {% if stats.pending_admin_count > 0 %}color-red{% else %}color-green{% endif %}">{{ stats.pending_admin_count }}</div>
+    <div class="metric-sub">Budget cap / policy escalation</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-head">
+      <span class="metric-label">DISCREPANCIES / ACTION</span>
+      <span class="metric-icon">⚠️</span>
+    </div>
+    <div class="metric-value {% if stats.mismatch_count > 0 %}color-red{% else %}color-green{% endif %}">{{ stats.mismatch_count + stats.needs_info_count }}</div>
+    <div class="metric-sub">Bill/payment mismatch or missing proof</div>
+  </div>
+</div>
+
 <!-- Employee Submissions Ledger Header & Filters -->
 <section class="inbox-header">
   <div>
@@ -121,7 +157,7 @@
         <th>ELIGIBLE PAYOUT</th>
         <th>PAYMENT PROOF</th>
         <th>STATUS</th>
-        <th>ACTION</th>
+        <th class="th-action">ACTION</th>
       </tr>
     </thead>
     <tbody>
@@ -331,6 +367,53 @@
   </div>
 </section>
 
+<!-- Corporate Project Budget Ledger Summary -->
+{% if budget_summary %}
+<section class="finance-banner" style="background: linear-gradient(135deg, #042f2e 0%, #0f172a 100%); border-color: #0f766e; margin-top: 15px;">
+  <div class="finance-col">
+    <span class="banner-eyebrow" style="color: #5eead4;">TOTAL PROJECT ALLOCATIONS</span>
+    <div class="banner-amount font-mono" style="color: #ffffff;">₹{{ "{:,.2f}".format(budget_summary.total_allocated) }}</div>
+    <span class="banner-hint" style="color: #99f6e4;">Combined employee spending caps</span>
+  </div>
+  <div class="finance-divider"></div>
+  <div class="finance-col">
+    <span class="banner-eyebrow" style="color: #86efac;">APPROVED PROJECT SPEND</span>
+    <div class="banner-amount font-mono color-green">₹{{ "{:,.2f}".format(budget_summary.total_approved) }}</div>
+    <span class="banner-hint" style="color: #bbf7d0;">Committed via double-entry ledger</span>
+  </div>
+  <div class="finance-divider"></div>
+  <div class="finance-col">
+    <span class="banner-eyebrow" style="color: #fde047;">REMAINING CORPORATE BUDGET</span>
+    <div class="banner-amount font-mono" style="color: #fde047;">₹{{ "{:,.2f}".format(budget_summary.total_remaining) }}</div>
+    <span class="banner-hint" style="color: #fef08a;">Unspent balance available across projects</span>
+  </div>
+  <div class="finance-divider"></div>
+  <div class="finance-col">
+    <span class="banner-eyebrow" style="color: #a5f3fc;">AUTONOMOUS APPROVALS</span>
+    <div class="banner-amount font-mono" style="color: #38bdf8;">{{ stats.auto_approved_count }} claims</div>
+    <span class="banner-hint" style="color: #cffafe;">₹{{ "{:,.2f}".format(stats.auto_approved_val or 0) }} verified & auto-deducted</span>
+  </div>
+</section>
+
+<!-- Active Budget Exhaustion Alerts -->
+{% if budget_summary.budget_alerts and budget_summary.budget_alerts|length > 0 %}
+<div class="alert-banner" style="background: #fef2f2; border: 1px solid #f87171; border-radius: 8px; padding: 12px 16px; margin-top: 15px; display: flex; align-items: center; justify-content: space-between;">
+  <div style="display: flex; align-items: center; gap: 10px;">
+    <span style="font-size: 20px;">⚠️</span>
+    <div>
+      <strong style="color: #991b1b;">Budget Exhaustion Warning ({{ budget_summary.budget_alerts|length }} Active):</strong>
+      <span style="color: #7f1d1d; font-size: 0.9rem;">
+        {% for ba in budget_summary.budget_alerts[:3] %}
+          {{ ba.user_name }} on {{ ba.project_code }} (Remaining: ₹{{ "{:,.2f}".format(ba.remaining_balance) }}){% if not loop.last %}; {% endif %}
+        {% endfor %}
+      </span>
+    </div>
+  </div>
+  <a href="{{ url_for('admin_allocations') }}" class="btn btn-sm btn-ghost-danger">Manage Budget Caps →</a>
+</div>
+{% endif %}
+{% endif %}
+
 <!-- Control Bar: Bulk Actions & Quick Seeder -->
 <section class="demo-controls-bar">
   <div class="controls-left">
@@ -384,12 +467,13 @@
 
     <div class="filter-pills" id="statusFilterPills">
       <button class="pill active" data-status="">All</button>
-      <button class="pill" data-status="Needs Review,PENDING_ACCOUNTS_REVIEW,RESUBMITTED">Needs Review</button>
-      <button class="pill" data-status="Needs Info,ADDITIONAL_INFORMATION_REQUESTED">Needs Info</button>
-      <button class="pill" data-status="Approved,AUTO_APPROVED">Approved</button>
+      <button class="pill" data-status="PENDING_ACCOUNTS,Needs Review">Accounts Queue ({{ stats.pending_accounts_count }})</button>
+      <button class="pill" data-status="PENDING_ACCOUNTS_ADMIN">Admin Escalation ({{ stats.pending_admin_count }})</button>
+      <button class="pill" data-status="MISMATCH">Mismatches ({{ stats.mismatch_count }})</button>
+      <button class="pill" data-status="AUTO_APPROVED,Approved">Auto-Approved ({{ stats.auto_approved_count }})</button>
+      <button class="pill" data-status="INSUFFICIENT_BALANCE,CAP_EXHAUSTED">Budget Exceeded ({{ stats.exceeded_budget_count }})</button>
       <button class="pill" data-status="REIMBURSEMENT_PENDING,REIMBURSED">Reimbursements</button>
-      <button class="pill" data-status="Duplicate">Duplicate</button>
-      <button class="pill" data-status="Rejected">Rejected</button>
+      <button class="pill" data-status="Duplicate,Rejected">Rejected</button>
       <button class="pill" data-risk="high">High Risk (50+)</button>
     </div>
   </div>
@@ -402,22 +486,26 @@
       <tr>
         <th>ID / DATE</th>
         <th>EMPLOYEE & CHANNEL</th>
+        <th>PROJECT & BUDGET</th>
         <th>MERCHANT & CATEGORY</th>
         <th>CLAIMED</th>
         <th>REIMBURSABLE</th>
         <th>MATH AUDIT</th>
         <th>RISK SCORE</th>
         <th>DECISION STATUS</th>
-        <th></th>
+        <th class="th-action">ACTION</th>
       </tr>
     </thead>
     <tbody>
       {% for e in expenses %}
       <tr 
         data-status="{{ e.status }}" 
+        data-approval="{{ e.approval_status or '' }}"
+        data-verification="{{ e.evidence_verification_status or '' }}"
+        data-budget="{{ e.budget_status or '' }}"
         data-risk="{{ e.risk_score }}"
         data-trip="{{ e.is_trip }}"
-        data-search="{{ (e.employee ~ ' ' ~ e.merchant ~ ' ' ~ e.category ~ ' ' ~ e.city ~ ' ' ~ e.status ~ ' ' ~ (e.flags or ''))|lower }}"
+        data-search="{{ (e.employee ~ ' ' ~ e.merchant ~ ' ' ~ e.category ~ ' ' ~ (e.project_code or '') ~ ' ' ~ e.city ~ ' ' ~ e.status ~ ' ' ~ (e.approval_status or '') ~ ' ' ~ (e.flags or ''))|lower }}"
       >
         <td>
           <div class="id-badge">#{{ e.id }}</div>
@@ -430,6 +518,19 @@
             <span class="channel-tag tag-{{ e.source|lower|replace(' ','-') }}">{{ e.source }}</span>
             {% if e.is_trip %}
               <span class="trip-tag" title="Expense incurred on out-of-town business trip">✈ Trip</span>
+            {% endif %}
+          </div>
+        </td>
+
+        <td>
+          <span class="id-badge font-mono">{{ e.project_code or 'GENERAL' }}</span>
+          <div style="margin-top: 4px;">
+            {% if e.budget_status == 'CAP_EXHAUSTED' %}
+              <span class="status-pill status-rejected" style="font-size:0.68rem; padding: 2px 6px;">CAP EXHAUSTED</span>
+            {% elif e.budget_status == 'INSUFFICIENT_BALANCE' %}
+              <span class="status-pill status-needs-info" style="font-size:0.68rem; padding: 2px 6px;">INSUFFICIENT</span>
+            {% else %}
+              <span class="status-pill status-approved" style="font-size:0.68rem; padding: 2px 6px;">WITHIN CAP</span>
             {% endif %}
           </div>
         </td>
@@ -482,6 +583,13 @@
           <span class="status-pill status-{{ e.status|lower|replace(' ', '-')|replace('_', '-') }}">
             {{ e.status|replace('_', ' ') }}
           </span>
+          {% if e.approval_status and e.approval_status != e.status %}
+            <div style="margin-top: 4px;">
+              <span class="font-mono" style="font-size:0.7rem; font-weight:700; color:#334155;">
+                {{ e.approval_status }}
+              </span>
+            </div>
+          {% endif %}
         </td>
 
         <td class="action-cell">

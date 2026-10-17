@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: receipt-graveyard
+    runtime: python
+    region: oregon
+    plan: starter
+    branch: main
+    buildCommand: "pip install --upgrade pip && pip install -r requirements.txt"
+    startCommand: "gunicorn app:app --workers 2 --threads 4 --timeout 120 --bind 0.0.0.0:$PORT"
+    healthCheckPath: /health
+    disk:
+      name: receipt-graveyard-storage
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: SECRET_KEY
+        generateValue: true
+      - key: FLASK_DEBUG
+        value: "0"
+      - key: RECEIPT_GRAVEYARD_DATA_DIR
+        value: /var/data
+      - key: DATABASE_PATH
+        value: /var/data/expenses.db
+      - key: UPLOAD_FOLDER
+        value: /var/data/uploads

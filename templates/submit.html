@@ -80,14 +80,77 @@
     </div>
 
     <!-- Live OCR Progress Bar -->
-    <div id="ocrProgressCard" class="ocr-progress-card" style="display: none; margin-top: 15px;">
-      <div class="ocr-progress-head">
-        <span class="ocr-spin">⚙</span>
-        <span id="ocrStatusText">Scanning Bill & Payment Proof with WebAssembly OCR...</span>
-        <span id="ocrPercentText" class="ocr-percent">0%</span>
+    <div id="ocrProgressCard" class="ocr-progress-card" style="display: none; margin-top: 18px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 16px;">
+      <div class="ocr-progress-head" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="ocr-spin" style="font-size: 16px;">⚙️</span>
+          <span id="ocrStatusText" style="font-size: 13px; font-weight: 600; color: #1e293b;">Processing receipt with RapidOCR & Adaptive Preprocessing...</span>
+        </div>
+        <span id="ocrPercentText" class="ocr-percent font-mono" style="font-size: 13px; font-weight: 700; color: #047857;">0%</span>
       </div>
-      <div class="ocr-bar-track">
-        <div id="ocrBarFill" class="ocr-bar-fill" style="width: 0%;"></div>
+      <div class="ocr-bar-track" style="height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden;">
+        <div id="ocrBarFill" class="ocr-bar-fill" style="width: 0%; height: 100%; background: #047857; transition: width 0.3s ease;"></div>
+      </div>
+    </div>
+
+    <!-- RapidOCR Extraction Review Card (Populated dynamically on scan) -->
+    <div id="ocrResultCard" style="display: none; margin-top: 18px; background: #ffffff; border: 1px solid #bbf7d0; border-radius: 8px; padding: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 20px;">🧾</span>
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: #0f172a;">RapidOCR Receipt Intelligence</div>
+            <div style="font-size: 12px; color: #64748b;" id="ocrEngineNote">Neural OCR & Preprocessing Engine</div>
+          </div>
+        </div>
+        <span id="ocrConfidenceBadge" class="status-pill status-approved" style="font-size: 11px;">
+          94% Confidence (High)
+        </span>
+      </div>
+
+      <!-- Detected Key Metrics Grid -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 14px; background: #f8fafc; padding: 12px; border-radius: 6px;">
+        <div>
+          <div style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase;">Detected Total</div>
+          <div style="font-size: 18px; font-weight: 800; color: #047857;" id="ocrExtractedTotal">₹0.00</div>
+        </div>
+        <div>
+          <div style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase;">Merchant</div>
+          <div style="font-size: 13px; font-weight: 700; color: #0f172a;" id="ocrExtractedMerchant">—</div>
+        </div>
+        <div>
+          <div style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase;">Date</div>
+          <div style="font-size: 13px; font-weight: 700; color: #0f172a;" id="ocrExtractedDate">—</div>
+        </div>
+        <div>
+          <div style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase;">Currency</div>
+          <div style="font-size: 13px; font-weight: 700; color: #0f172a;" id="ocrExtractedCurrency">INR</div>
+        </div>
+      </div>
+
+      <!-- Detected Line Items & Tax Breakdown (Conditional) -->
+      <div id="ocrLineItemsWrap" style="display: none; margin-bottom: 12px;">
+        <div style="font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 6px;">
+          Detected Line Items & Reconciliation:
+        </div>
+        <div id="ocrLineItemsList" style="font-size: 12px; color: #475569; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px;"></div>
+      </div>
+
+      <!-- OCR Warnings / Uncertainty notice -->
+      <div id="ocrWarningWrap" style="display: none; margin-bottom: 12px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 10px 14px; font-size: 12px; color: #92400e;">
+        <div style="font-weight: 600; margin-bottom: 2px;">⚠️ Receipt Inspection Note:</div>
+        <div id="ocrWarningText"></div>
+      </div>
+
+      <!-- Accept / Confirmation Guidance -->
+      <div style="display: flex; justify-content: space-between; align-items: center; background: #ecfdf5; border-radius: 6px; padding: 10px 14px; font-size: 12px; color: #065f46;">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span>✓</span>
+          <span><strong>Values Auto-Populated:</strong> Check the form below and make any necessary adjustments before submission.</span>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-green" onclick="document.getElementById('fieldAmount').scrollIntoView({behavior: 'smooth'})">
+          Review Fields ↓
+        </button>
       </div>
     </div>
 
@@ -571,93 +634,230 @@ function captureCameraSnapshot() {
     billImgPreview.src = dataUri;
     billFileName.textContent = 'camera_bill_capture.jpg';
     billPreviewWrap.style.display = 'flex';
+    runBillOCRCamera(dataUri);
   } else {
     document.getElementById('payCameraData').value = dataUri;
     payImgPreview.src = dataUri;
     payFileName.textContent = 'camera_payment_capture.jpg';
     payPreviewWrap.style.display = 'flex';
+    runPaymentOCRCamera(dataUri);
   }
   closeCameraModal();
 }
 
-// Client-Side OCR with Tesseract.js
+// ----------------- SERVER-SIDE RAPIDOCR INVOCATIONS -----------------
+
 async function runBillOCR(file) {
-  if (typeof Tesseract === 'undefined') return;
   const progressCard = document.getElementById('ocrProgressCard');
   const statusText = document.getElementById('ocrStatusText');
   const percentText = document.getElementById('ocrPercentText');
   const barFill = document.getElementById('ocrBarFill');
 
   progressCard.style.display = 'block';
-  statusText.textContent = 'Scanning Bill with WebAssembly OCR...';
-  percentText.textContent = '10%';
-  barFill.style.width = '10%';
+  statusText.textContent = 'Uploading receipt to RapidOCR engine...';
+  percentText.textContent = '25%';
+  barFill.style.width = '25%';
+
+  const formData = new FormData();
+  formData.append('receipt', file);
 
   try {
-    const worker = await Tesseract.createWorker('eng');
-    const res = await worker.recognize(file);
-    const text = res.data.text;
-    await worker.terminate();
+    statusText.textContent = 'Applying OpenCV deskewing, CLAHE contrast & RapidOCR neural vision...';
+    percentText.textContent = '65%';
+    barFill.style.width = '65%';
 
-    document.getElementById('ocrRawText').value = text;
-    autofillFromBillText(text);
+    const response = await fetch('/api/scan-receipt', {
+      method: 'POST',
+      body: formData
+    });
 
-    statusText.textContent = 'Bill scanned successfully!';
-    percentText.textContent = '100%';
-    barFill.style.width = '100%';
-    setTimeout(() => { progressCard.style.display = 'none'; }, 2000);
-  } catch (e) {
+    const data = await response.json();
+
+    if (data.success && data.suggested) {
+      percentText.textContent = '100%';
+      barFill.style.width = '100%';
+      statusText.textContent = '✓ Extraction verified!';
+
+      document.getElementById('ocrRawText').value = data.raw_text || '';
+      applyExtractedBillData(data);
+
+      setTimeout(() => {
+        progressCard.style.display = 'none';
+      }, 1200);
+    } else {
+      statusText.textContent = data.error || 'Text detection was inconclusive. Please enter values manually.';
+      setTimeout(() => { progressCard.style.display = 'none'; }, 2500);
+    }
+  } catch (err) {
+    statusText.textContent = 'OCR service notification: Please complete fields manually.';
+    setTimeout(() => { progressCard.style.display = 'none'; }, 2500);
+  }
+}
+
+async function runBillOCRCamera(dataUri) {
+  const progressCard = document.getElementById('ocrProgressCard');
+  const statusText = document.getElementById('ocrStatusText');
+  const percentText = document.getElementById('ocrPercentText');
+  const barFill = document.getElementById('ocrBarFill');
+
+  progressCard.style.display = 'block';
+  statusText.textContent = 'Processing camera capture with RapidOCR...';
+  percentText.textContent = '35%';
+  barFill.style.width = '35%';
+
+  const formData = new FormData();
+  formData.append('camera_data', dataUri);
+
+  try {
+    const response = await fetch('/api/scan-receipt', {
+      method: 'POST',
+      body: formData
+    });
+
+    const data = await response.json();
+    if (data.success && data.suggested) {
+      percentText.textContent = '100%';
+      barFill.style.width = '100%';
+      statusText.textContent = '✓ Camera snapshot parsed!';
+      document.getElementById('ocrRawText').value = data.raw_text || '';
+      applyExtractedBillData(data);
+      setTimeout(() => { progressCard.style.display = 'none'; }, 1200);
+    } else {
+      progressCard.style.display = 'none';
+    }
+  } catch (err) {
     progressCard.style.display = 'none';
   }
 }
 
-async function runPaymentOCR(file) {
-  if (typeof Tesseract === 'undefined') return;
-  try {
-    const worker = await Tesseract.createWorker('eng');
-    const res = await worker.recognize(file);
-    const text = res.data.text;
-    await worker.terminate();
+function applyExtractedBillData(data) {
+  const sug = data.suggested;
+  const resultCard = document.getElementById('ocrResultCard');
 
-    document.getElementById('payRawText').value = text;
-    autofillFromPaymentText(text);
-  } catch (e) {}
-}
-
-function autofillFromBillText(text) {
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-
-  // Merchant
-  for (let l of lines.slice(0, 4)) {
-    if (!l.match(/tax|invoice|bill|receipt|gstin|date|welcome|table/i)) {
-      const clean = l.replace(/[^a-zA-Z0-9\s&\.\-\']/g, '').trim();
-      if (clean.length > 3 && !clean.match(/^\d+$/)) {
-        const mField = document.getElementById('fieldMerchant');
-        if (!mField.value) mField.value = clean;
-        break;
+  // Populate form fields
+  if (sug.amount !== null && sug.amount !== undefined) {
+    document.getElementById('fieldAmount').value = parseFloat(sug.amount).toFixed(2);
+  }
+  if (sug.merchant) {
+    document.getElementById('fieldMerchant').value = sug.merchant;
+  }
+  if (sug.date) {
+    document.getElementById('fieldDate').value = sug.date;
+  }
+  if (sug.currency) {
+    const currField = document.getElementById('fieldCurrency');
+    if (currField) currField.value = sug.currency;
+  }
+  if (sug.category) {
+    const catField = document.getElementById('fieldCategory');
+    if (catField) {
+      for (let i = 0; i < catField.options.length; i++) {
+        if (catField.options[i].value === sug.category) {
+          catField.selectedIndex = i;
+          break;
+        }
       }
     }
   }
 
-  // Date
-  const dateMatch = text.match(/(\d{4}[-/]\d{1,2}[-/]\d{1,2})|(\d{1,2}[-/]\d{1,2}[-/]\d{4})/);
-  if (dateMatch) {
-    const raw = dateMatch[0];
-    let norm = raw;
-    if (raw.includes('/')) {
-      const parts = raw.split('/');
-      if (parts[0].length === 4) norm = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
-      else if (parts[2].length === 4) norm = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-    }
-    const dField = document.getElementById('fieldDate');
-    if (!dField.value) dField.value = norm;
+  // Populate Review Card UI
+  const currSymbol = sug.currency === 'INR' ? '₹' : (sug.currency + ' ');
+  const fmtAmt = sug.amount ? parseFloat(sug.amount).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '0.00';
+  
+  document.getElementById('ocrExtractedTotal').textContent = currSymbol + fmtAmt;
+  document.getElementById('ocrExtractedMerchant').textContent = sug.merchant || 'Unrecognized Merchant';
+  document.getElementById('ocrExtractedDate').textContent = sug.date || 'Unrecognized Date';
+  document.getElementById('ocrExtractedCurrency').textContent = sug.currency || 'INR';
+
+  const badge = document.getElementById('ocrConfidenceBadge');
+  const pct = Math.round((data.confidence || 0.85) * 100);
+  badge.textContent = `${pct}% Confidence (${data.confidence_band || 'Good'})`;
+  if (pct >= 80) {
+    badge.className = 'status-pill status-approved';
+  } else if (pct >= 50) {
+    badge.className = 'status-pill status-needs-info';
+  } else {
+    badge.className = 'status-pill status-rejected';
   }
 
-  // Amount
-  const totalMatch = text.match(/(?:grand\s+total|total\s+amount|net\s+payable|total)[\s\:\=]*[₹\$€£Rs\.]*\s*([0-9]{1,6}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)/i);
-  if (totalMatch) {
-    const val = parseFloat(totalMatch[1].replace(/,/g, ''));
-    if (val > 0) document.getElementById('fieldAmount').value = val.toFixed(2);
+  document.getElementById('ocrEngineNote').textContent = data.ocr_note || 'RapidOCR ONNX Neural Engine';
+
+  // Line items
+  const itemsWrap = document.getElementById('ocrLineItemsWrap');
+  const itemsList = document.getElementById('ocrLineItemsList');
+  if (data.line_items && data.line_items.length > 0) {
+    itemsList.innerHTML = data.line_items.map(it => `
+      <div style="display:flex; justify-content:space-between; padding:3px 0; border-bottom:1px dashed #f1f5f9;">
+        <span>${it.name || 'Item'} ${it.qty > 1 ? 'x' + it.qty : ''}</span>
+        <strong>${currSymbol}${parseFloat(it.price || 0).toFixed(2)}</strong>
+      </div>
+    `).join('');
+    itemsWrap.style.display = 'block';
+  } else {
+    itemsWrap.style.display = 'none';
+  }
+
+  // Warnings
+  const warnWrap = document.getElementById('ocrWarningWrap');
+  const warnText = document.getElementById('ocrWarningText');
+  if (data.uncertainty_flags && data.uncertainty_flags.length > 0) {
+    warnText.textContent = data.uncertainty_flags.join(' · ');
+    warnWrap.style.display = 'block';
+  } else {
+    warnWrap.style.display = 'none';
+  }
+
+  resultCard.style.display = 'block';
+}
+
+async function runPaymentOCR(file) {
+  const formData = new FormData();
+  formData.append('payment_screenshot', file);
+
+  try {
+    const res = await fetch('/api/scan-payment', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+    if (data.success && data.payment_info) {
+      applyPaymentData(data.payment_info, data.raw_text);
+    }
+  } catch (e) {}
+}
+
+async function runPaymentOCRCamera(dataUri) {
+  const formData = new FormData();
+  formData.append('payment_camera_data', dataUri);
+
+  try {
+    const res = await fetch('/api/scan-payment', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+    if (data.success && data.payment_info) {
+      applyPaymentData(data.payment_info, data.raw_text);
+    }
+  } catch (e) {}
+}
+
+function applyPaymentData(info, rawText) {
+  document.getElementById('payRawText').value = rawText || '';
+  if (info.transaction_ref) {
+    const txnField = document.getElementById('fieldTxnRef');
+    if (txnField && !txnField.value) txnField.value = info.transaction_ref;
+  }
+  if (info.upi_app) {
+    const upiAppField = document.getElementById('fieldUpiApp');
+    if (upiAppField) {
+      for (let i = 0; i < upiAppField.options.length; i++) {
+        if (upiAppField.options[i].value === info.upi_app) {
+          upiAppField.selectedIndex = i;
+          break;
+        }
+      }
+    }
   }
 }
 

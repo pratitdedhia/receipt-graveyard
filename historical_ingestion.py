@@ -6,6 +6,7 @@ import os
 import zipfile
 from datetime import datetime
 from pathlib import Path
+import budget_engine
 
 def identify_columns(headers):
     """
@@ -250,6 +251,9 @@ def ingest_csv_data(csv_text_or_file, con, analyze_func, current_user_name="Admi
         new_exp_id = con.execute("SELECT last_insert_rowid()").fetchone()[0]
         created_expense_ids.append(new_exp_id)
         imported_rows += 1
+
+        if project_id and result["status"] == "Approved":
+            budget_engine.process_claim_auto_approval(con, new_exp_id, actor=f"Historical CSV Import ({current_user_name})")
 
     con.commit()
 

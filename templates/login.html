@@ -1,156 +1,213 @@
 {% extends "base.html" %}
-{% block title %}Authentication & Registration · Receipt Graveyard AI Auditor{% endblock %}
+{% block title %}Sign In & Staff Registration · The Receipt Graveyard{% endblock %}
 
 {% block content %}
-<div class="login-container">
-  <div class="login-card">
-    <div class="login-brand-head">
-      <div class="login-icon">🔐</div>
-      <h2>Role-Based Authentication</h2>
-      <p>Secure portal for Admin, Accounts Personnel, and Submitting Employees.</p>
+<div class="login-container" style="max-width: 680px; margin: 30px auto; padding: 0 15px;">
+  <div class="login-card" style="background: var(--bg-card, #ffffff); border: 1px solid var(--border-color, #e2e8f0); border-radius: 8px; padding: 36px; box-shadow: 0 4px 20px rgba(0,0,0,0.04);">
+    
+    <div class="login-brand-head" style="text-align: center; margin-bottom: 24px;">
+      <div style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 8px; background: #ecfdf5; border: 1px solid #a7f3d0; color: #047857; font-size: 20px; margin-bottom: 12px;">
+        🛡️
+      </div>
+      <h2 style="font-size: 24px; font-weight: 700; color: #0f172a; margin-bottom: 6px; letter-spacing: -0.02em;">
+        Enterprise Financial Portal
+      </h2>
+      <p style="font-size: 14px; color: #64748b; margin: 0;">
+        Secure role-based access for Administrators, Accounts Personnel, and Employees.
+      </p>
     </div>
 
-    <!-- Tab Switcher: Sign In vs Register -->
-    <div class="auth-tabs-row">
-      <button type="button" class="auth-tab-btn {% if active_tab != 'register' %}active{% endif %}" id="tabSignInBtn" onclick="switchAuthTab('signin')">
+    <!-- Main Tabs: Sign In vs Register -->
+    <div class="auth-tabs-row" style="display: flex; gap: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 24px;">
+      <button type="button" class="auth-tab-btn {% if active_tab != 'register' %}active{% endif %}" id="tabSignInBtn" onclick="switchAuthTab('signin')" style="flex: 1; padding: 10px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; border: 1px solid transparent; background: transparent; color: #64748b; transition: all 0.2s;">
         Sign In
       </button>
-      <button type="button" class="auth-tab-btn {% if active_tab == 'register' %}active{% endif %}" id="tabRegisterBtn" onclick="switchAuthTab('register')">
-        Create Account / Register
+      <button type="button" class="auth-tab-btn {% if active_tab == 'register' %}active{% endif %}" id="tabRegisterBtn" onclick="switchAuthTab('register')" style="flex: 1; padding: 10px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; border: 1px solid transparent; background: transparent; color: #64748b; transition: all 0.2s;">
+        New Registration
       </button>
     </div>
 
     <!-- TAB 1: SIGN IN FORM -->
     <div id="signInTab" style="{% if active_tab == 'register' %}display: none;{% endif %}">
       <form method="post" action="{{ url_for('login') }}" class="login-form">
-        <div class="form-group">
-          <label>Work Email Address</label>
-          <input type="email" name="email" id="loginEmail" required placeholder="name@company.com" class="form-input">
+        <div class="form-group" style="margin-bottom: 18px;">
+          <label style="display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 6px;">
+            Official Work Email *
+          </label>
+          <input type="email" name="email" id="loginEmail" required placeholder="name@company.com" class="form-input" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
         </div>
 
-        <div class="form-group">
-          <label>Password</label>
-          <input type="password" name="password" id="loginPassword" required placeholder="••••••••" class="form-input">
+        <div class="form-group" style="margin-bottom: 22px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label style="font-size: 13px; font-weight: 600; color: #334155;">
+              Password *
+            </label>
+            <button type="button" onclick="togglePasswordVisibility('loginPassword', this)" style="background: none; border: none; font-size: 12px; color: #047857; cursor: pointer; font-weight: 600;">
+              Show
+            </button>
+          </div>
+          <input type="password" name="password" id="loginPassword" required placeholder="••••••••" class="form-input" style="width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
         </div>
 
-        <button type="submit" class="btn btn-primary btn-submit-claim">
-          Sign In to Workspace →
+        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 12px; font-size: 15px; font-weight: 600; border-radius: 6px; cursor: pointer;">
+          Sign In to Portal →
         </button>
       </form>
     </div>
 
-    <!-- TAB 2: REGISTER FORM -->
+    <!-- TAB 2: REGISTRATION FORM -->
     <div id="registerTab" style="{% if active_tab != 'register' %}display: none;{% endif %}">
-      <form method="post" action="{{ url_for('register') }}" class="login-form">
-        <div class="form-group">
-          <label>Full Name *</label>
-          <input type="text" name="name" required placeholder="e.g. Ananya Roy" class="form-input">
-        </div>
+      
+      <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 12px 16px; margin-bottom: 20px; font-size: 13px; color: #166534; line-height: 1.5;">
+        <strong>Approval Workflow:</strong> All new employee and accounts registrations are placed in a <code>PENDING_APPROVAL</code> queue and require review and activation by an authorized Administrator before dashboard access is permitted.
+      </div>
 
-        <div class="form-group">
-          <label>Work Email Address *</label>
-          <input type="email" name="email" required placeholder="ananya.roy@company.com" class="form-input">
+      <!-- Registration Role Selector -->
+      <div style="margin-bottom: 20px;">
+        <label style="display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 8px;">
+          Select Registration Type *
+        </label>
+        <div style="display: flex; gap: 10px;">
+          <label style="flex: 1; display: flex; align-items: center; gap: 8px; padding: 12px; border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer; background: #ffffff;" id="labelRoleEmployee">
+            <input type="radio" name="reg_role_select" value="employee" checked onchange="toggleRegRole('employee')">
+            <div>
+              <div style="font-weight: 600; font-size: 13px; color: #0f172a;">Employee</div>
+              <div style="font-size: 11px; color: #64748b;">Submit expenses & receipts</div>
+            </div>
+          </label>
+          <label style="flex: 1; display: flex; align-items: center; gap: 8px; padding: 12px; border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer; background: #ffffff;" id="labelRoleAccounts">
+            <input type="radio" name="reg_role_select" value="accounts" onchange="toggleRegRole('accounts')">
+            <div>
+              <div style="font-weight: 600; font-size: 13px; color: #0f172a;">Accounts Staff</div>
+              <div style="font-size: 11px; color: #64748b;">Review & approve claims</div>
+            </div>
+          </label>
         </div>
+      </div>
 
-        <div class="input-row-2">
+      <form method="post" action="{{ url_for('register') }}" class="login-form" id="mainRegisterForm">
+        <input type="hidden" name="role" id="hiddenRegRole" value="employee">
+
+        <div class="input-row-2" style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
           <div class="form-group">
-            <label>Password *</label>
-            <input type="password" name="password" required placeholder="••••••••" class="form-input">
+            <label style="display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 4px;">Full Name *</label>
+            <input type="text" name="name" required placeholder="e.g. Vikram Sharma" class="form-input" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
           </div>
           <div class="form-group">
-            <label>Account Role *</label>
-            <select name="role" class="form-input">
-              <option value="employee" selected>Employee (Claim Submissions)</option>
-              <option value="accounts">Accounts Reviewer (Approvals & Audits)</option>
-            </select>
+            <label style="display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 4px;" id="idLabel">
+              Employee ID *
+            </label>
+            <input type="text" name="employee_id" required placeholder="e.g. EMP-2026-088" class="form-input" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
           </div>
         </div>
 
-        <div class="input-row-2">
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label style="display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 4px;">Official Work Email *</label>
+          <input type="email" name="email" required placeholder="name@company.com" class="form-input" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
+        </div>
+
+        <div class="input-row-2" style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
           <div class="form-group">
-            <label>Home Office Branch *</label>
-            <select name="office_id" class="form-input">
+            <label style="display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 4px;">Department *</label>
+            <input type="text" name="department" required placeholder="e.g. Engineering, Sales, Finance" class="form-input" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
+          </div>
+          <div class="form-group">
+            <label style="display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 4px;">Designation / Title *</label>
+            <input type="text" name="designation" required placeholder="e.g. Senior Consultant" class="form-input" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
+          </div>
+        </div>
+
+        <div class="input-row-2" style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
+          <div class="form-group">
+            <label style="display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 4px;">Home Office / Branch *</label>
+            <select name="office_id" class="form-input" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
               {% for o in all_offices %}
                 <option value="{{ o.id }}">{{ o.name }} ({{ o.city }})</option>
               {% endfor %}
             </select>
           </div>
           <div class="form-group">
-            <label>Department / Team</label>
-            <input type="text" name="department" placeholder="e.g. Sales, Technology, Ops" class="form-input">
+            <label style="display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 4px;">Contact Number</label>
+            <input type="text" name="phone" placeholder="+91 98000 00000" class="form-input" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
           </div>
         </div>
 
-        <div class="form-group">
-          <label>Phone / UPI Mobile Number</label>
-          <input type="text" name="phone" placeholder="+91 98000 00000" class="form-input">
+        <!-- Conditional Field for Accounts Users -->
+        <div class="form-group" id="reasonForAccessWrap" style="display: none; margin-bottom: 14px;">
+          <label style="display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 4px;">
+            Reason for Requiring Accounts Reviewer Access *
+          </label>
+          <input type="text" name="reason_for_access" id="reasonForAccessInput" placeholder="e.g. Assigned to West Region Accounts & Audit team" class="form-input" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
         </div>
 
-        <button type="submit" class="btn btn-primary btn-submit-claim">
-          Create Account & Sign In →
+        <div class="input-row-2" style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 22px;">
+          <div class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <label style="font-size: 13px; font-weight: 600; color: #334155;">Password *</label>
+              <button type="button" onclick="togglePasswordVisibility('regPassword', this)" style="background: none; border: none; font-size: 12px; color: #047857; cursor: pointer; font-weight: 600;">Show</button>
+            </div>
+            <input type="password" name="password" id="regPassword" required placeholder="Min 6 characters" class="form-input" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
+          </div>
+          <div class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <label style="font-size: 13px; font-weight: 600; color: #334155;">Confirm Password *</label>
+              <button type="button" onclick="togglePasswordVisibility('regConfirmPassword', this)" style="background: none; border: none; font-size: 12px; color: #047857; cursor: pointer; font-weight: 600;">Show</button>
+            </div>
+            <input type="password" name="confirm_password" id="regConfirmPassword" required placeholder="Re-enter password" class="form-input" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 12px; font-size: 15px; font-weight: 600; border-radius: 6px; cursor: pointer;">
+          Submit Registration for Admin Approval →
         </button>
       </form>
     </div>
 
-    <div class="login-divider">
-      <span>OR SELECT 1-CLICK DEMO PERSONA FOR JUDGING</span>
+    <!-- Hackathon Quick Persona Selector -->
+    <div class="login-divider" style="margin: 28px 0 16px; text-align: center; position: relative;">
+      <span style="background: #ffffff; padding: 0 12px; font-size: 11px; font-weight: 700; color: #475569; letter-spacing: 0.05em;">
+        QUICK DEMO PERSONAS FOR HACKATHON EVALUATION
+      </span>
     </div>
 
-    <div class="demo-personas-grid">
+    <div class="demo-personas-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px;">
       <!-- Admin -->
-      <div class="persona-chip admin-chip" onclick="quickLogin('admin@company.com', 'admin123')">
-        <div class="persona-avatar" style="background: #0f766e;">👑</div>
+      <div class="persona-chip admin-chip" onclick="quickLogin('admin@company.com', 'admin123')" style="padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 10px; background: #f8fafc; transition: all 0.15s;">
+        <div class="persona-avatar" style="width: 34px; height: 34px; border-radius: 6px; background: #0f766e; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px;">👑</div>
         <div class="persona-info">
-          <strong>Rajesh Sharma [ADMIN]</strong>
-          <small>Policy Director · Mumbai HQ · Full System Access</small>
+          <strong style="font-size: 13px; color: #0f172a; display: block;">Rajesh Sharma [ADMIN]</strong>
+          <small style="font-size: 11px; color: #64748b;">Policy Director · Full Admin Control & Approvals</small>
         </div>
       </div>
 
       <!-- Accounts -->
-      <div class="persona-chip accounts-chip" onclick="quickLogin('accounts@company.com', 'accounts123')">
-        <div class="persona-avatar" style="background: #15803d;">💼</div>
+      <div class="persona-chip accounts-chip" onclick="quickLogin('accounts@company.com', 'accounts123')" style="padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 10px; background: #f8fafc; transition: all 0.15s;">
+        <div class="persona-avatar" style="width: 34px; height: 34px; border-radius: 6px; background: #15803d; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px;">💼</div>
         <div class="persona-info">
-          <strong>Priya Nair [ACCOUNTS]</strong>
-          <small>Finance Reviewer · Mumbai HQ · Approvals & Audits</small>
-        </div>
-      </div>
-
-      <!-- Auditor -->
-      <div class="persona-chip audit-chip" onclick="quickLogin('audit@company.com', 'audit123')">
-        <div class="persona-avatar" style="background: #0369a1;">⚖️</div>
-        <div class="persona-info">
-          <strong>Vikram Sen [ACCOUNTS]</strong>
-          <small>Internal Auditor · Delhi Regional Hub</small>
+          <strong style="font-size: 13px; color: #0f172a; display: block;">Priya Nair [ACCOUNTS]</strong>
+          <small style="font-size: 11px; color: #64748b;">Finance Reviewer · Claims Queue & Dual Proofs</small>
         </div>
       </div>
 
       <!-- Employee 1 -->
-      <div class="persona-chip emp-chip" onclick="quickLogin('aarav@company.com', 'employee123')">
-        <div class="persona-avatar" style="background: #b45309;">👤</div>
+      <div class="persona-chip emp-chip" onclick="quickLogin('aarav@company.com', 'employee123')" style="padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 10px; background: #f8fafc; transition: all 0.15s;">
+        <div class="persona-avatar" style="width: 34px; height: 34px; border-radius: 6px; background: #b45309; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px;">👤</div>
         <div class="persona-info">
-          <strong>Aarav Mehta [EMPLOYEE]</strong>
-          <small>Sales Director · Home Office: Mumbai HQ</small>
+          <strong style="font-size: 13px; color: #0f172a; display: block;">Aarav Mehta [EMPLOYEE]</strong>
+          <small style="font-size: 11px; color: #64748b;">Sales Director · Mapped to Mumbai HQ</small>
         </div>
       </div>
 
       <!-- Employee 2 -->
-      <div class="persona-chip emp-chip" onclick="quickLogin('isha@company.com', 'employee123')">
-        <div class="persona-avatar" style="background: #7c3aed;">👤</div>
+      <div class="persona-chip emp-chip" onclick="quickLogin('isha@company.com', 'employee123')" style="padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 10px; background: #f8fafc; transition: all 0.15s;">
+        <div class="persona-avatar" style="width: 34px; height: 34px; border-radius: 6px; background: #7c3aed; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px;">👤</div>
         <div class="persona-info">
-          <strong>Isha Shah [EMPLOYEE]</strong>
-          <small>Engineering Lead · Home Office: Bengaluru Tech Center</small>
-        </div>
-      </div>
-
-      <!-- Employee 3 -->
-      <div class="persona-chip emp-chip" onclick="quickLogin('nina@company.com', 'employee123')">
-        <div class="persona-avatar" style="background: #4338ca;">👤</div>
-        <div class="persona-info">
-          <strong>Nina Patel [EMPLOYEE]</strong>
-          <small>Operations Manager · Home Office: Delhi NCR Hub</small>
+          <strong style="font-size: 13px; color: #0f172a; display: block;">Isha Shah [EMPLOYEE]</strong>
+          <small style="font-size: 11px; color: #64748b;">Engineering Lead · Bengaluru Tech Center</small>
         </div>
       </div>
     </div>
+
   </div>
 </div>
 {% endblock %}
@@ -166,13 +223,57 @@ function switchAuthTab(tab) {
   if (tab === 'register') {
     signInTab.style.display = 'none';
     registerTab.style.display = 'block';
-    tabSignInBtn.classList.remove('active');
-    tabRegisterBtn.classList.add('active');
+    tabSignInBtn.style.color = '#64748b';
+    tabSignInBtn.style.background = 'transparent';
+    tabSignInBtn.style.border = '1px solid transparent';
+    tabRegisterBtn.style.color = '#047857';
+    tabRegisterBtn.style.background = '#ecfdf5';
+    tabRegisterBtn.style.border = '1px solid #a7f3d0';
   } else {
     signInTab.style.display = 'block';
     registerTab.style.display = 'none';
-    tabSignInBtn.classList.add('active');
-    tabRegisterBtn.classList.remove('active');
+    tabSignInBtn.style.color = '#047857';
+    tabSignInBtn.style.background = '#ecfdf5';
+    tabSignInBtn.style.border = '1px solid #a7f3d0';
+    tabRegisterBtn.style.color = '#64748b';
+    tabRegisterBtn.style.background = 'transparent';
+    tabRegisterBtn.style.border = '1px solid transparent';
+  }
+}
+
+function toggleRegRole(role) {
+  document.getElementById('hiddenRegRole').value = role;
+  const reasonWrap = document.getElementById('reasonForAccessWrap');
+  const reasonInput = document.getElementById('reasonForAccessInput');
+  const idLabel = document.getElementById('idLabel');
+
+  if (role === 'accounts') {
+    reasonWrap.style.display = 'block';
+    reasonInput.required = true;
+    idLabel.textContent = 'Accounts / Staff ID *';
+    document.getElementById('labelRoleAccounts').style.borderColor = '#047857';
+    document.getElementById('labelRoleAccounts').style.background = '#f0fdf4';
+    document.getElementById('labelRoleEmployee').style.borderColor = '#cbd5e1';
+    document.getElementById('labelRoleEmployee').style.background = '#ffffff';
+  } else {
+    reasonWrap.style.display = 'none';
+    reasonInput.required = false;
+    idLabel.textContent = 'Employee ID *';
+    document.getElementById('labelRoleEmployee').style.borderColor = '#047857';
+    document.getElementById('labelRoleEmployee').style.background = '#f0fdf4';
+    document.getElementById('labelRoleAccounts').style.borderColor = '#cbd5e1';
+    document.getElementById('labelRoleAccounts').style.background = '#ffffff';
+  }
+}
+
+function togglePasswordVisibility(fieldId, btn) {
+  const field = document.getElementById(fieldId);
+  if (field.type === 'password') {
+    field.type = 'text';
+    btn.textContent = 'Hide';
+  } else {
+    field.type = 'password';
+    btn.textContent = 'Show';
   }
 }
 
@@ -182,5 +283,12 @@ function quickLogin(email, password) {
   document.getElementById('loginPassword').value = password;
   document.querySelector('#signInTab form').submit();
 }
+
+// Initialize active tab styling
+document.addEventListener('DOMContentLoaded', () => {
+  const activeTab = "{{ active_tab }}";
+  switchAuthTab(activeTab === 'register' ? 'register' : 'signin');
+  toggleRegRole('employee');
+});
 </script>
 {% endblock %}

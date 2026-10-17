@@ -13,7 +13,7 @@
 <body>
 <header class="topbar">
   <div class="topbar-inner">
-    <a class="brand" href="{{ url_for('dashboard') }}">
+    <a class="brand" href="{{ url_for('index') }}">
       <div class="brand-mark">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
@@ -44,100 +44,97 @@
 
     <!-- Top Navigation Links -->
     <nav class="top-nav">
-      {% if current_user.role == 'admin' %}
-        <a href="{{ url_for('admin_console') }}" class="{% if request.endpoint == 'admin_console' %}active{% endif %}">Admin Console</a>
-      {% endif %}
-      
-      <a href="{{ url_for('dashboard') }}" class="{% if request.endpoint == 'dashboard' %}active{% endif %}">
-        {% if current_user.role == 'employee' %}My Claims{% else %}Command Center{% endif %}
-      </a>
-      
-      <a href="{{ url_for('submit') }}" class="{% if request.endpoint == 'submit' %}active{% endif %}">Submit Receipt</a>
-      
-      {% if current_user.role in ('admin', 'accounts') %}
-        <a href="{{ url_for('import_bulk') }}" class="{% if request.endpoint in ('import_bulk', 'bulk_receipt_import', 'import_bulk_map', 'import_bulk_results') %}active{% endif %}">Bulk Drive Import</a>
-      {% endif %}
-      
-      <a href="{{ url_for('profile') }}" class="{% if request.endpoint == 'profile' %}active{% endif %}">My Profile</a>
+      {% if current_user %}
+        {% if current_user.role == 'admin' %}
+          <a href="{{ url_for('admin_console') }}" class="{% if request.endpoint == 'admin_console' %}active{% endif %}">Admin Console</a>
+        {% endif %}
+        
+        <a href="{{ url_for('dashboard') }}" class="{% if request.endpoint == 'dashboard' %}active{% endif %}">
+          {% if current_user.role == 'employee' %}My Claims{% else %}Command Center{% endif %}
+        </a>
+        
+        <a href="{{ url_for('submit') }}" class="{% if request.endpoint == 'submit' %}active{% endif %}">Submit Receipt</a>
+        
+        {% if current_user.role in ('admin', 'accounts') %}
+          <a href="{{ url_for('admin_allocations') }}" class="{% if request.endpoint == 'admin_allocations' %}active{% endif %}">Budget Caps</a>
+          <a href="{{ url_for('import_bulk') }}" class="{% if request.endpoint in ('import_bulk', 'bulk_receipt_import', 'import_bulk_map', 'import_bulk_results') %}active{% endif %}">Bulk Drive Import</a>
+        {% endif %}
+        
+        <a href="{{ url_for('profile') }}" class="{% if request.endpoint == 'profile' %}active{% endif %}">My Profile</a>
 
-      {% if current_user.role in ('admin', 'accounts') %}
-        <a href="{{ url_for('analytics') }}" class="{% if request.endpoint == 'analytics' %}active{% endif %}">Analytics & Trips</a>
-      {% endif %}
+        {% if current_user.role in ('admin', 'accounts') %}
+          <a href="{{ url_for('analytics') }}" class="{% if request.endpoint == 'analytics' %}active{% endif %}">Analytics & Trips</a>
+        {% endif %}
 
-      <a href="{{ url_for('policy') }}" class="{% if request.endpoint == 'policy' %}active{% endif %}">Policy Rules</a>
+        <a href="{{ url_for('policy') }}" class="{% if request.endpoint == 'policy' %}active{% endif %}">Policy Rules</a>
 
-      <!-- In-App Notification Bell & Dropdown -->
-      <div class="nav-dropdown">
-        <button class="nav-btn-notif" title="View In-App Notifications">
-          <span class="notif-bell-icon">🔔</span>
-          {% if unread_notifications_count > 0 %}
-            <span class="notif-badge">{{ unread_notifications_count }}</span>
-          {% endif %}
-        </button>
-        <div class="dropdown-content dropdown-notifs">
-          <div class="notif-dropdown-head">
-            <strong>NOTIFICATIONS</strong>
+        <!-- In-App Notification Bell & Dropdown -->
+        <div class="nav-dropdown">
+          <button class="nav-btn-notif" title="View In-App Notifications">
+            <span class="notif-bell-icon">🔔</span>
             {% if unread_notifications_count > 0 %}
-              <form method="post" action="{{ url_for('mark_all_notifications_read') }}" style="display:inline;">
-                <button type="submit" class="btn-text-sm">Mark all read</button>
-              </form>
+              <span class="notif-badge">{{ unread_notifications_count }}</span>
+            {% endif %}
+          </button>
+          <div class="dropdown-content dropdown-notifs">
+            <div class="notif-dropdown-head">
+              <strong>NOTIFICATIONS</strong>
+              {% if unread_notifications_count > 0 %}
+                <form method="post" action="{{ url_for('mark_all_notifications_read') }}" style="display:inline;">
+                  <button type="submit" class="btn-text-sm">Mark all read</button>
+                </form>
+              {% endif %}
+            </div>
+            {% if unread_notifications %}
+              <div class="notif-items-list">
+                {% for n in unread_notifications %}
+                  <div class="notif-item notif-type-{{ n.type }}">
+                    <div class="notif-title-row">
+                      <strong>{{ n.title }}</strong>
+                      <small>{{ n.created_at[-5:] }}</small>
+                    </div>
+                    <p class="notif-msg">{{ n.message }}</p>
+                    {% if n.claim_id %}
+                      <a href="{{ url_for('expense_detail', expense_id=n.claim_id) }}" class="notif-link">Open Claim #{{ n.claim_id }} →</a>
+                    {% endif %}
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="notif-empty-state">
+                <span>✓ All caught up! No unread notifications.</span>
+              </div>
             {% endif %}
           </div>
-          {% if unread_notifications %}
-            <div class="notif-items-list">
-              {% for n in unread_notifications %}
-                <div class="notif-item notif-type-{{ n.type }}">
-                  <div class="notif-title-row">
-                    <strong>{{ n.title }}</strong>
-                    <small>{{ n.created_at[-5:] }}</small>
-                  </div>
-                  <p class="notif-msg">{{ n.message }}</p>
-                  {% if n.claim_id %}
-                    <a href="{{ url_for('expense_detail', expense_id=n.claim_id) }}" class="notif-link">Open Claim #{{ n.claim_id }} →</a>
-                  {% endif %}
-                </div>
-              {% endfor %}
-            </div>
-          {% else %}
-            <div class="notif-empty-state">
-              <span>✓ All caught up! No unread notifications.</span>
-            </div>
-          {% endif %}
         </div>
-      </div>
 
-      <!-- Quick Persona Switcher Dropdown (Crucial for Hackathon Judging!) -->
-      <div class="nav-dropdown">
-        <button class="nav-btn-persona" title="Switch between Admin, Accounts, and Employee roles">
-          <span>Switch Persona ▾</span>
-        </button>
-        <div class="dropdown-content dropdown-personas">
-          <div class="dropdown-header">SWITCH ROLE / PERSONA</div>
-          {% for u in all_users %}
-            <a href="{{ url_for('switch_user', user_id=u.id) }}" class="{% if current_user and current_user.id == u.id %}current-persona{% endif %}">
-              <span class="persona-dot" style="background: {{ u.avatar_color or '#0f766e' }};"></span>
-              <div>
-                <strong>{{ u.name }}</strong>
-                <small>[{{ u.role|upper }}] · {{ u.office_city }}</small>
-              </div>
-            </a>
-          {% endfor %}
-        </div>
-      </div>
 
-      <!-- Corporate Export Dropdown (Hidden from regular employees!) -->
-      {% if current_user.role in ('admin', 'accounts') %}
-      <div class="nav-dropdown">
-        <button class="nav-btn-dropdown">Export ▾</button>
-        <div class="dropdown-content">
-          <a href="{{ url_for('export_csv') }}">Download Audit CSV ↗</a>
-          <a href="{{ url_for('export_json') }}" target="_blank">View Audit JSON ↗</a>
-          <a href="{{ url_for('export_standardized') }}">Standardized 8-File Package (.zip) ↗</a>
+        <!-- Corporate Export Dropdown (Hidden from regular employees!) -->
+        {% if current_user.role in ('admin', 'accounts') %}
+        <div class="nav-dropdown">
+          <button class="nav-btn-dropdown">Export ▾</button>
+          <div class="dropdown-content">
+            <a href="{{ url_for('export_csv') }}">Download Audit CSV ↗</a>
+            <a href="{{ url_for('export_json') }}" target="_blank">View Audit JSON ↗</a>
+            <a href="{{ url_for('export_standardized') }}">Standardized 8-File Package (.zip) ↗</a>
+          </div>
         </div>
-      </div>
+        {% endif %}
+
+        <a href="{{ url_for('logout') }}" class="logout-link" title="Sign out">Log Out</a>
+      {% else %}
+        {% if request.endpoint in ('landing', 'index') %}
+          <a href="#features">Features</a>
+          <a href="#how-it-works">How It Works</a>
+          <a href="#security">Security</a>
+        {% else %}
+          <a href="{{ url_for('landing') }}#features">Features</a>
+          <a href="{{ url_for('landing') }}#how-it-works">How It Works</a>
+          <a href="{{ url_for('landing') }}#security">Security</a>
+        {% endif %}
+        <a href="{{ url_for('login') }}" class="nav-login-btn">Sign In</a>
+        <a href="{{ url_for('register') }}" class="btn btn-primary" style="padding: 7px 16px; font-size: 13px; text-decoration: none;">Get Started</a>
       {% endif %}
-
-      <a href="{{ url_for('logout') }}" class="logout-link" title="Sign out">Log Out</a>
     </nav>
   </div>
 </header>
@@ -161,18 +158,71 @@
   {% block content %}{% endblock %}
 </main>
 
-<footer class="app-footer">
-  <div class="footer-inner">
-    <div><strong>RECEIPT GRAVEYARD</strong> · Autonomous AI Expense Policy & Fraud Auditor</div>
-    <div class="footer-links">
-      <span>Role-Based Governance (Admin / Accounts / Employee)</span>
-      <span>·</span>
-      <span>Employee-Office Mapping</span>
-      <span>·</span>
-      <span>Dual Bill & Payment Proof Matching</span>
+<a href="#top" id="backToTopBtn" class="back-to-top" title="Back to top" aria-label="Back to top">↑</a>
+
+<footer class="app-footer" style="background: #0e1e17; border-top: 1px solid #1f4233; padding: 32px 24px; color: #94a3b8; font-size: 13px;">
+  <div class="footer-inner" style="max-width: 1360px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+    <div>
+      <strong style="color: #ffffff;">THE RECEIPT GRAVEYARD</strong>
+      <div style="font-size: 12px; margin-top: 3px; color: #94a3b8;">Turn paper receipts into structured expense claims with intelligent receipt processing.</div>
+    </div>
+    <div style="display: flex; gap: 18px; align-items: center;">
+      <a href="{{ url_for('login') }}" style="color: #cbd5e1; text-decoration: none;">Sign In</a>
+      <a href="{{ url_for('register') }}" style="color: #cbd5e1; text-decoration: none;">Register</a>
+      <a href="{% if request.endpoint in ('landing', 'index') %}#features{% else %}{{ url_for('landing') }}#features{% endif %}" style="color: #cbd5e1; text-decoration: none;">Features</a>
+      <a href="{% if request.endpoint in ('landing', 'index') %}#how-it-works{% else %}{{ url_for('landing') }}#how-it-works{% endif %}" style="color: #cbd5e1; text-decoration: none;">How It Works</a>
+      <a href="{% if request.endpoint in ('landing', 'index') %}#security{% else %}{{ url_for('landing') }}#security{% endif %}" style="color: #cbd5e1; text-decoration: none;">Security</a>
+    </div>
+    <div style="font-size: 12px; color: #94a3b8;">
+      © 2026 The Receipt Graveyard. Hackathon Demonstration Release.
     </div>
   </div>
 </footer>
+
+<script>
+  // Robust in-page smooth scrolling with sticky header offset
+  document.addEventListener('DOMContentLoaded', function () {
+    const topbar = document.querySelector('.topbar');
+    const backToTopBtn = document.getElementById('backToTopBtn');
+
+    // Toggle Back to Top button on scroll
+    window.addEventListener('scroll', function () {
+      if (window.pageYOffset > 320) {
+        if (backToTopBtn) backToTopBtn.classList.add('visible');
+      } else {
+        if (backToTopBtn) backToTopBtn.classList.remove('visible');
+      }
+    }, { passive: true });
+
+    // Smooth scroll for hash links
+    document.querySelectorAll('a[href^="#"]').forEach(function (anchor) {
+      anchor.addEventListener('click', function (e) {
+        const href = this.getAttribute('href');
+        if (!href || href === '#') return;
+        
+        if (href === '#top') {
+          e.preventDefault();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          history.pushState(null, '', window.location.pathname);
+          return;
+        }
+
+        const targetId = href.slice(1);
+        const targetEl = document.getElementById(targetId);
+        if (targetEl) {
+          e.preventDefault();
+          const headerHeight = topbar ? topbar.offsetHeight : 72;
+          const targetY = targetEl.getBoundingClientRect().top + window.pageYOffset - (headerHeight + 14);
+          window.scrollTo({
+            top: Math.max(0, targetY),
+            behavior: 'smooth'
+          });
+          history.pushState(null, '', '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
 
 {% block extra_scripts %}{% endblock %}
 </body>

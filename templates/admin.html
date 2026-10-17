@@ -19,13 +19,24 @@
 
 <!-- Executive Summary Counters -->
 <section class="metrics-grid" style="margin-bottom: 25px;">
+  <div class="metric-card {% if pending_users and pending_users|length > 0 %}border-amber{% endif %}">
+    <div class="metric-head">
+      <span class="metric-label">PENDING APPROVALS</span>
+      <span class="metric-icon">⏳</span>
+    </div>
+    <div class="metric-value {% if pending_users and pending_users|length > 0 %}color-amber{% else %}color-green{% endif %}">
+      {{ pending_users|length if pending_users else 0 }}
+    </div>
+    <div class="metric-sub">New staff awaiting admin review</div>
+  </div>
+
   <div class="metric-card">
     <div class="metric-head">
       <span class="metric-label">REGISTERED STAFF</span>
       <span class="metric-icon">👥</span>
     </div>
     <div class="metric-value">{{ users|length }}</div>
-    <div class="metric-sub">Employees & Finance Personnel</div>
+    <div class="metric-sub">Active approved personnel</div>
   </div>
 
   <div class="metric-card">
@@ -56,6 +67,106 @@
   </div>
 </section>
 
+<!-- Section 0: Dedicated Account Approvals Queue -->
+<section class="admin-block" style="border: 2px solid {% if pending_users and pending_users|length > 0 %}#f59e0b{% else %}var(--border-color, #e2e8f0){% endif %}; margin-bottom: 30px;">
+  <div class="block-header-row">
+    <div>
+      <span class="card-eyebrow" style="color: #d97706; font-weight: 700;">SECURITY & ONBOARDING GOVERNANCE</span>
+      <h2 class="block-title" style="display: flex; align-items: center; gap: 10px;">
+        Pending Account Registrations
+        <span class="status-pill {% if pending_users and pending_users|length > 0 %}status-needs-info{% else %}status-approved{% endif %}">
+          {{ pending_users|length if pending_users else 0 }} PENDING
+        </span>
+      </h2>
+    </div>
+  </div>
+
+  {% if pending_users and pending_users|length > 0 %}
+  <div class="table-container">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>APPLICANT</th>
+          <th>REQUESTED ROLE</th>
+          <th>EMPLOYEE / STAFF ID</th>
+          <th>DEPARTMENT & TITLE</th>
+          <th>BRANCH / OFFICE</th>
+          <th>REASON / NOTES</th>
+          <th>SUBMITTED</th>
+          <th class="th-action th-action-wide">DECISION ACTIONS</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in pending_users %}
+        <tr style="background: #fffbeb;">
+          <td>
+            <div class="emp-user-cell">
+              <div class="emp-user-avatar" style="background: {{ u.avatar_color or '#0f766e' }};">
+                {{ u.name[:2]|upper }}
+              </div>
+              <div>
+                <strong>{{ u.name }}</strong>
+                <div class="table-sub">{{ u.email }}</div>
+                {% if u.phone %}<div class="table-sub">{{ u.phone }}</div>{% endif %}
+              </div>
+            </div>
+          </td>
+          <td>
+            <span class="status-pill {% if u.role == 'accounts' %}status-approved{% else %}status-needs-info{% endif %}">
+              {{ u.role|upper }}
+            </span>
+          </td>
+          <td>
+            <code>{{ u.employee_id or 'Not Provided' }}</code>
+          </td>
+          <td>
+            <div><strong>{{ u.department or 'Operations' }}</strong></div>
+            <div class="table-sub">{{ u.designation or 'Staff Member' }}</div>
+          </td>
+          <td>
+            <div>{{ u.office_name or 'Main Office' }}</div>
+          </td>
+          <td>
+            {% if u.reason_for_access %}
+              <div style="font-size: 12px; color: #475569; max-width: 200px;">
+                "{{ u.reason_for_access }}"
+              </div>
+            {% else %}
+              <span class="table-sub">—</span>
+            {% endif %}
+          </td>
+          <td>
+            <div style="font-size: 12px; color: #64748b;">{{ u.created_at or 'Recent' }}</div>
+          </td>
+          <td class="action-cell action-cell-wide">
+            <div class="action-buttons-group">
+              <!-- Approve Button -->
+              <form method="post" action="{{ url_for('approve_user_registration', user_id=u.id) }}" style="display: inline;">
+                <button type="submit" class="btn btn-sm btn-outline-green" style="font-weight: 600; white-space: nowrap;" onclick="return confirm('Approve account access for {{ u.name }} ({{ u.role }})?');">
+                  ✓ Approve
+                </button>
+              </form>
+
+              <!-- Reject Button -->
+              <button type="button" class="btn btn-sm btn-ghost-danger" style="font-weight: 600; white-space: nowrap;" onclick="openRejectUserModal({{ u.id }}, '{{ u.name }}')">
+                ✕ Reject
+              </button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="padding: 32px; text-align: center; color: #64748b; background: #f8fafc; border-radius: 6px;">
+    <div style="font-size: 28px; margin-bottom: 8px;">✓</div>
+    <div style="font-weight: 600; color: #0f172a; font-size: 15px; margin-bottom: 4px;">All Caught Up: No Pending Registrations</div>
+    <div style="font-size: 13px;">All staff accounts have been reviewed. New employee and accounts sign-ups will appear here for administrator approval.</div>
+  </div>
+  {% endif %}
+</section>
+
 <!-- Section 1: Staff Roster & User Account Management -->
 <section class="admin-block">
   <div class="block-header-row">
@@ -79,7 +190,7 @@
           <th>DEPARTMENT</th>
           <th>MAPPED HOME OFFICE</th>
           <th>STATUS</th>
-          <th>ACTIONS</th>
+          <th class="th-action th-action-wide">ACTIONS</th>
         </tr>
       </thead>
       <tbody>
@@ -121,8 +232,8 @@
             {% endif %}
           </td>
 
-          <td>
-            <div style="display:flex; gap:6px; align-items:center;">
+          <td class="action-cell action-cell-wide">
+            <div class="action-buttons-group">
               <form method="post" action="{{ url_for('update_user') }}" style="display:inline-flex; gap:4px;">
                 <input type="hidden" name="user_id" value="{{ u.id }}">
                 <input type="hidden" name="department" value="{{ u.department or '' }}">
@@ -139,11 +250,11 @@
               {% if u.id != current_user.id %}
               <form method="post" action="{{ url_for('toggle_user_status', user_id=u.id) }}" style="display:inline;">
                 {% if u.is_active is defined and not u.is_active %}
-                  <button type="submit" class="btn btn-sm btn-outline-green" title="Reactivate user profile">
+                  <button type="submit" class="btn btn-sm btn-outline-green" style="white-space: nowrap;" title="Reactivate user profile">
                     Activate
                   </button>
                 {% else %}
-                  <button type="submit" class="btn btn-sm btn-ghost-danger" title="Soft deactivate user profile">
+                  <button type="submit" class="btn btn-sm btn-ghost-danger" style="white-space: nowrap;" title="Soft deactivate user profile">
                     Deactivate
                   </button>
                 {% endif %}
@@ -181,7 +292,7 @@
           <th>BUDGET</th>
           <th>PER-PERSON AUTO-APPROVAL CAP</th>
           <th>STATUS</th>
-          <th>ACTIONS</th>
+          <th class="th-action">ACTIONS</th>
         </tr>
       </thead>
       <tbody>
@@ -212,15 +323,17 @@
             </span>
           </td>
 
-          <td>
-            <form method="post" action="{{ url_for('update_project_status', project_id=p.id) }}" style="display:inline-flex; gap:4px;">
-              <select name="status" class="form-input form-input-sm" style="width:110px;">
-                <option value="Active" {% if p.status == 'Active' %}selected{% endif %}>Active</option>
-                <option value="Inactive" {% if p.status == 'Inactive' %}selected{% endif %}>Inactive</option>
-                <option value="Archived" {% if p.status == 'Archived' %}selected{% endif %}>Archived</option>
-              </select>
-              <button type="submit" class="btn btn-sm btn-secondary">Set</button>
-            </form>
+          <td class="action-cell">
+            <div class="action-buttons-group">
+              <form method="post" action="{{ url_for('update_project_status', project_id=p.id) }}" style="display:inline-flex; gap:4px;">
+                <select name="status" class="form-input form-input-sm" style="width:110px;">
+                  <option value="Active" {% if p.status == 'Active' %}selected{% endif %}>Active</option>
+                  <option value="Inactive" {% if p.status == 'Inactive' %}selected{% endif %}>Inactive</option>
+                  <option value="Archived" {% if p.status == 'Archived' %}selected{% endif %}>Archived</option>
+                </select>
+                <button type="submit" class="btn btn-sm btn-secondary">Set</button>
+              </form>
+            </div>
           </td>
         </tr>
         {% endfor %}
@@ -493,6 +606,37 @@
     </form>
   </div>
 </div>
+
+<!-- Modal: Reject User Registration with Mandatory Reason -->
+<div id="rejectUserModal" class="modal-backdrop" style="display: none;">
+  <div class="modal-dialog">
+    <div class="modal-head">
+      <h3 style="color: #b91c1c;">Reject Account Registration</h3>
+      <button class="modal-close-btn" onclick="closeRejectUserModal()">✕</button>
+    </div>
+    <form method="post" id="rejectUserForm" action="">
+      <div class="modal-body">
+        <p style="font-size: 14px; color: #475569; margin-bottom: 14px;">
+          Rejecting registration for <strong id="rejectUserName">User</strong>. Please document the specific business or compliance reason for audit trail transparency.
+        </p>
+
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label style="display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 6px;">
+            Rejection Reason *
+          </label>
+          <textarea name="rejection_reason" id="rejectionReasonInput" required rows="3" placeholder="e.g. Employee ID could not be verified with HR records, or unauthorized Accounts access requested." class="form-input" style="width: 100%;"></textarea>
+        </div>
+
+        <div class="modal-action-row">
+          <button type="button" class="btn btn-secondary" onclick="closeRejectUserModal()">Cancel</button>
+          <button type="submit" class="btn btn-ghost-danger" style="background: #ef4444; color: #ffffff; border: none;">
+            Confirm Rejection
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -505,6 +649,17 @@ function toggleAddUserModal() {
 function toggleAddProjectModal() {
   const m = document.getElementById('addProjectModal');
   m.style.display = m.style.display === 'none' ? 'flex' : 'none';
+}
+
+function openRejectUserModal(userId, userName) {
+  document.getElementById('rejectUserName').textContent = userName;
+  document.getElementById('rejectUserForm').action = '/admin/users/' + userId + '/reject';
+  document.getElementById('rejectionReasonInput').value = '';
+  document.getElementById('rejectUserModal').style.display = 'flex';
+}
+
+function closeRejectUserModal() {
+  document.getElementById('rejectUserModal').style.display = 'none';
 }
 </script>
 {% endblock %}

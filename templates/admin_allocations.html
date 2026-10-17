@@ -1,0 +1,398 @@
+{% extends "base.html" %}
+{% block title %}Project Budget Allocations & Spending Caps · Receipt Graveyard{% endblock %}
+
+{% block content %}
+<div class="admin-head-row">
+  <div>
+    <div class="eyebrow-chip">PROJECT-WISE SPENDING CAPS · BUDGET LEDGER & GOVERNANCE</div>
+    <h1 class="page-title">Project Budget Allocations & <span>Employee Caps</span></h1>
+    <p class="page-intro">
+      Manage individual employee spending caps per enterprise project. Verified expenses within remaining balances are automatically approved. All adjustments and approvals are recorded in persistent double-entry audit ledgers.
+    </p>
+  </div>
+  <div class="hero-actions" style="margin-top:0;">
+    <a href="{{ url_for('export_allocations') }}" class="btn btn-secondary">
+      📊 Export Allocations CSV
+    </a>
+    <button type="button" class="btn btn-primary" onclick="toggleAssignModal()">
+      + Assign Project Spending Cap
+    </button>
+  </div>
+</div>
+
+<!-- Search & Filter Bar -->
+<section class="inbox-header" style="margin-top: 20px;">
+  <div>
+    <div class="eyebrow-text">BUDGET ALLOCATIONS DIRECTORY</div>
+    <h2 class="inbox-title">Active Allocations <span class="badge-count">{{ allocations|length }}</span></h2>
+  </div>
+
+  <form method="get" action="{{ url_for('admin_allocations') }}" class="filter-toolbar">
+    <div class="search-input-wrap">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      <input type="search" name="search" value="{{ search_q or '' }}" placeholder="Search employee, project code...">
+    </div>
+
+    <select name="project_id" class="form-input form-input-sm" onchange="this.form.submit()" style="width: auto;">
+      <option value="">All Projects</option>
+      {% for p in all_projects %}
+        <option value="{{ p.id }}" {% if project_filter|string == p.id|string %}selected{% endif %}>{{ p.code }} - {{ p.name }}</option>
+      {% endfor %}
+    </select>
+
+    <select name="status" class="form-input form-input-sm" onchange="this.form.submit()" style="width: auto;">
+      <option value="">All Statuses</option>
+      <option value="ACTIVE" {% if status_filter == 'ACTIVE' %}selected{% endif %}>Active</option>
+      <option value="INACTIVE" {% if status_filter == 'INACTIVE' %}selected{% endif %}>Inactive</option>
+      <option value="SUSPENDED" {% if status_filter == 'SUSPENDED' %}selected{% endif %}>Suspended</option>
+    </select>
+
+    {% if search_q or project_filter or status_filter %}
+      <a href="{{ url_for('admin_allocations') }}" class="btn btn-sm btn-ghost">Clear</a>
+    {% endif %}
+  </form>
+</section>
+
+<!-- Allocations Table -->
+<div class="table-container" style="margin-top: 15px;">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>EMPLOYEE</th>
+        <th>PROJECT</th>
+        <th>ALLOCATED CAP</th>
+        <th>APPROVED SPEND</th>
+        <th>RESERVED</th>
+        <th>REMAINING BALANCE</th>
+        <th>UTILIZED %</th>
+        <th>STATUS</th>
+        <th class="th-action">ACTIONS</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in allocations %}
+      <tr>
+        <td>
+          <div class="emp-user-cell">
+            <div class="emp-user-avatar" style="background: #0f766e;">
+              {{ a.user_name[:2]|upper }}
+            </div>
+            <div>
+              <strong>{{ a.user_name }}</strong>
+              <div class="table-sub">{{ a.user_email }} · {{ a.user_department or 'Operations' }}</div>
+            </div>
+          </div>
+        </td>
+
+        <td>
+          <span class="id-badge font-mono">{{ a.project_code }}</span>
+          <div class="table-sub"><strong>{{ a.project_name }}</strong></div>
+        </td>
+
+        <td class="font-mono">
+          <strong style="font-size: 1rem;">₹{{ "{:,.2f}".format(a.allocated_cap) }}</strong>
+        </td>
+
+        <td class="font-mono color-green">
+          ₹{{ "{:,.2f}".format(a.approved_expenditure) }}
+        </td>
+
+        <td class="font-mono color-amber">
+          ₹{{ "{:,.2f}".format(a.reserved_expenditure) }}
+        </td>
+
+        <td class="font-mono">
+          {% if a.remaining_balance <= 0 %}
+            <span class="badge-status-danger" style="padding: 4px 8px; border-radius: 6px; font-weight: 700;">
+              ₹{{ "{:,.2f}".format(a.remaining_balance) }} (EXHAUSTED)
+            </span>
+          {% elif a.remaining_balance < 500 %}
+            <span class="badge-status-warning" style="padding: 4px 8px; border-radius: 6px; font-weight: 700;">
+              ₹{{ "{:,.2f}".format(a.remaining_balance) }} (LOW)
+            </span>
+          {% else %}
+            <span class="color-green" style="font-weight: 700; font-size: 1rem;">
+              ₹{{ "{:,.2f}".format(a.remaining_balance) }}
+            </span>
+          {% endif %}
+        </td>
+
+        <td>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="flex: 1; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; min-width: 60px;">
+              <div style="width: {{ min(100, a.percent_consumed) }}%; height: 100%; background: {% if a.percent_consumed >= 100 %}#dc2626{% elif a.percent_consumed >= 80 %}#f59e0b{% else %}#10b981{% endif %};"></div>
+            </div>
+            <span class="font-mono" style="font-size: 0.8rem; font-weight: 600;">{{ a.percent_consumed }}%</span>
+          </div>
+        </td>
+
+        <td>
+          <span class="status-pill {% if a.status == 'ACTIVE' %}status-approved{% else %}status-rejected{% endif %}">
+            {{ a.status }}
+          </span>
+        </td>
+
+        <td class="action-cell">
+          <button type="button" class="btn btn-sm btn-outline-primary" style="white-space: nowrap;" onclick="openAdjustModal('{{ a.id }}', '{{ a.user_name }}', '{{ a.project_code }}', '{{ a.allocated_cap }}', '{{ a.remaining_balance }}')">
+            ⚙️ Adjust Cap
+          </button>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="9" style="text-align: center; padding: 30px; color: #64748b;">
+          No project budget allocations found matching query. Click "+ Assign Project Spending Cap" above to create an allocation.
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Immutable Cap Adjustment Audit Trail -->
+<section class="admin-block" style="margin-top: 40px;">
+  <div class="block-header-row">
+    <div>
+      <span class="card-eyebrow">IMMUTABLE COMPLIANCE AUDIT TRAIL</span>
+      <h2 class="block-title">Budget Allocation Adjustments Log ({{ adjustments_history|length }})</h2>
+      <p class="small-sub">Every spending cap increase or decrease is permanently recorded with prior cap, new cap, reason, and authorized actor.</p>
+    </div>
+  </div>
+
+  <div class="table-container">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>ADJUSTMENT ID</th>
+          <th>TIMESTAMP</th>
+          <th>EMPLOYEE</th>
+          <th>PROJECT</th>
+          <th>PREVIOUS CAP</th>
+          <th>NEW CAP</th>
+          <th>DELTA</th>
+          <th>AUTHORIZED ACTOR</th>
+          <th>AUDIT REASON</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for adj in adjustments_history %}
+        <tr>
+          <td class="font-mono">#ADJ-{{ adj.id }}</td>
+          <td class="table-sub">{{ adj.created_at }}</td>
+          <td><strong>{{ adj.user_name }}</strong></td>
+          <td><span class="id-badge font-mono">{{ adj.project_code }}</span></td>
+          <td class="font-mono">₹{{ "{:,.2f}".format(adj.previous_cap) }}</td>
+          <td class="font-mono font-bold color-green">₹{{ "{:,.2f}".format(adj.new_cap) }}</td>
+          <td class="font-mono">
+            {% set delta = adj.new_cap - adj.previous_cap %}
+            {% if delta > 0 %}
+              <span class="color-green">+₹{{ "{:,.2f}".format(delta) }}</span>
+            {% elif delta < 0 %}
+              <span class="color-red">-₹{{ "{:,.2f}".format(delta|abs) }}</span>
+            {% else %}
+              <span class="text-muted">₹0.00</span>
+            {% endif %}
+          </td>
+          <td><span class="status-pill status-approved">{{ adj.actor }}</span></td>
+          <td><em>{{ adj.reason }}</em></td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="9" style="text-align: center; padding: 25px; color: #64748b;">
+            No cap adjustment audit records yet.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- Double-Entry Budget Ledger Audit -->
+<section class="admin-block" style="margin-top: 30px;">
+  <div class="block-header-row">
+    <div>
+      <span class="card-eyebrow">DOUBLE-ENTRY FINANCIAL AUDIT</span>
+      <h2 class="block-title">Recent Budget Ledger Transactions ({{ ledger_entries|length }})</h2>
+      <p class="small-sub">Authoritative source of financial truth. Deductions, reversals, and adjustments are committed atomically.</p>
+    </div>
+  </div>
+
+  <div class="table-container">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>LEDGER ID</th>
+          <th>TIMESTAMP</th>
+          <th>EMPLOYEE</th>
+          <th>PROJECT</th>
+          <th>EXPENSE CLAIM</th>
+          <th>ENTRY TYPE</th>
+          <th>TRANSACTION AMOUNT</th>
+          <th>BALANCE AFTER</th>
+          <th>ACTOR</th>
+          <th>NOTES</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for l in ledger_entries %}
+        <tr>
+          <td class="font-mono">#LEDGER-{{ l.id }}</td>
+          <td class="table-sub">{{ l.created_at }}</td>
+          <td><strong>{{ l.user_name }}</strong></td>
+          <td><span class="id-badge font-mono">{{ l.project_code }}</span></td>
+          <td>
+            {% if l.expense_id %}
+              <a href="{{ url_for('expense_detail', expense_id=l.expense_id) }}" class="id-tag-link">Claim #{{ l.expense_id }}</a>
+            {% else %}
+              <span class="text-muted">N/A (Cap Adjustment)</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="status-pill {% if l.entry_type == 'EXPENDITURE' %}status-rejected{% elif l.entry_type == 'REVERSAL' %}status-needs-info{% else %}status-approved{% endif %}">
+              {{ l.entry_type }}
+            </span>
+          </td>
+          <td class="font-mono font-bold">
+            {% if l.amount < 0 %}
+              <span class="color-green">-₹{{ "{:,.2f}".format(l.amount|abs) }}</span>
+            {% else %}
+              <span class="color-red">+₹{{ "{:,.2f}".format(l.amount) }}</span>
+            {% endif %}
+          </td>
+          <td class="font-mono font-bold">
+            ₹{{ "{:,.2f}".format(l.balance_after) }}
+          </td>
+          <td><span class="status-pill status-approved">{{ l.actor }}</span></td>
+          <td class="table-sub">{{ l.notes }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="10" style="text-align: center; padding: 25px; color: #64748b;">
+            No ledger transactions recorded yet.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- Modal: Assign Project Spending Cap -->
+<div id="assignModal" class="modal-backdrop" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000; align-items: center; justify-content: center;">
+  <div class="modal-card" style="background: white; border-radius: 12px; width: 95%; max-width: 520px; padding: 24px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <h3 style="margin: 0; font-size: 1.25rem;">Assign Project Spending Cap</h3>
+      <button type="button" onclick="toggleAssignModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+    </div>
+    <form method="post" action="{{ url_for('admin_allocations') }}">
+      <div class="form-group">
+        <label>Select Project *</label>
+        <select name="project_id" required class="form-input">
+          {% for p in all_projects %}
+            <option value="{{ p.id }}">{{ p.code }} · {{ p.name }} (Default Cap: ₹{{ "{:,.0f}".format(p.auto_approval_cap or 2000) }})</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Select Employee *</label>
+        <select name="user_id" required class="form-input">
+          {% for u in all_users %}
+            <option value="{{ u.id }}">{{ u.name }} ({{ u.email }}) - {{ u.role|upper }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Allocated Spending Cap (INR) *</label>
+        <div style="position: relative;">
+          <span style="position: absolute; left: 12px; top: 10px; font-weight: bold; color: #64748b;">₹</span>
+          <input type="number" name="cap" step="50" min="100" required placeholder="4000.00" class="form-input font-mono" style="padding-left: 28px;">
+        </div>
+        <small class="table-sub">Individual maximum spending limit for this employee under this project.</small>
+      </div>
+
+      <div class="input-row-2">
+        <div class="form-group">
+          <label>Start Date (Optional)</label>
+          <input type="date" name="start_date" class="form-input">
+        </div>
+        <div class="form-group">
+          <label>End Date (Optional)</label>
+          <input type="date" name="end_date" class="form-input">
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+        <button type="button" class="btn btn-secondary" onclick="toggleAssignModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Allocation</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Adjust Allocation Cap -->
+<div id="adjustModal" class="modal-backdrop" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000; align-items: center; justify-content: center;">
+  <div class="modal-card" style="background: white; border-radius: 12px; width: 95%; max-width: 520px; padding: 24px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <h3 style="margin: 0; font-size: 1.25rem;">Adjust Project Spending Cap</h3>
+      <button type="button" onclick="closeAdjustModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+    </div>
+    <form id="adjustForm" method="post" action="">
+      <p id="adjustTargetText" style="font-size: 0.95rem; color: #334155; margin-bottom: 15px;"></p>
+
+      <div class="form-group">
+        <label>Current Allocated Cap</label>
+        <input type="text" id="adjustPrevCap" readonly class="form-input font-mono" style="background: #f1f5f9; font-weight: bold;">
+      </div>
+
+      <div class="form-group">
+        <label>Current Remaining Balance</label>
+        <input type="text" id="adjustPrevRem" readonly class="form-input font-mono" style="background: #f1f5f9;">
+      </div>
+
+      <div class="form-group">
+        <label>New Spending Cap (INR) *</label>
+        <div style="position: relative;">
+          <span style="position: absolute; left: 12px; top: 10px; font-weight: bold; color: #64748b;">₹</span>
+          <input type="number" id="adjustNewCap" name="new_cap" step="50" min="0" required class="form-input font-mono" style="padding-left: 28px; font-size: 1.1rem; font-weight: bold;">
+        </div>
+        <small class="table-sub">Remaining balance will be automatically recalculated (New Cap - Approved - Reserved).</small>
+      </div>
+
+      <div class="form-group">
+        <label>Audit Reason for Adjustment * <small class="color-red">(Mandatory for audit trail)</small></label>
+        <textarea name="reason" required rows="3" class="form-input" placeholder="e.g. Approved budget expansion for Q4 College Event Operations by Finance Committee..."></textarea>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+        <button type="button" class="btn btn-secondary" onclick="closeAdjustModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Commit Budget Adjustment</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function toggleAssignModal() {
+  const m = document.getElementById("assignModal");
+  m.style.display = m.style.display === "none" ? "flex" : "none";
+}
+
+function openAdjustModal(id, empName, projCode, curCap, curRem) {
+  const m = document.getElementById("adjustModal");
+  const form = document.getElementById("adjustForm");
+  form.action = "/admin/allocations/" + id + "/adjust";
+  document.getElementById("adjustTargetText").innerText = "Adjusting budget cap for " + empName + " under Project " + projCode;
+  document.getElementById("adjustPrevCap").value = "₹" + parseFloat(curCap).toLocaleString('en-IN', {minimumFractionDigits: 2});
+  document.getElementById("adjustPrevRem").value = "₹" + parseFloat(curRem).toLocaleString('en-IN', {minimumFractionDigits: 2});
+  document.getElementById("adjustNewCap").value = parseFloat(curCap);
+  m.style.display = "flex";
+}
+
+function closeAdjustModal() {
+  document.getElementById("adjustModal").style.display = "none";
+}
+</script>
+{% endblock %}

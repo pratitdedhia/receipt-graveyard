@@ -131,7 +131,7 @@
           <th>TOTAL ROWS</th>
           <th>STATUS</th>
           <th>PROGRESS</th>
-          <th>ACTIONS</th>
+          <th class="th-action">ACTIONS</th>
         </tr>
       </thead>
       <tbody>
@@ -169,16 +169,18 @@
                 {% endif %}
               </div>
             </td>
-            <td>
-              {% if b.status == 'PENDING' %}
-                <a href="{{ url_for('import_bulk_map', batch_id=b.id) }}" class="btn btn-sm btn-primary">
-                  Map Columns →
-                </a>
-              {% else %}
-                <a href="{{ url_for('import_bulk_results', batch_id=b.id) }}" class="btn btn-sm btn-accent">
-                  View Results & Audit →
-                </a>
-              {% endif %}
+            <td class="action-cell">
+              <div class="action-buttons-group">
+                {% if b.status == 'PENDING' %}
+                  <a href="{{ url_for('import_bulk_map', batch_id=b.id) }}" class="btn btn-sm btn-primary" style="white-space: nowrap;">
+                    Map Columns →
+                  </a>
+                {% else %}
+                  <a href="{{ url_for('import_bulk_results', batch_id=b.id) }}" class="btn btn-sm btn-accent" style="white-space: nowrap;">
+                    View Results & Audit →
+                  </a>
+                {% endif %}
+              </div>
             </td>
           </tr>
           {% endfor %}

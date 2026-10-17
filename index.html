@@ -1,0 +1,632 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Receipt Graveyard · Receipts In. Reimbursements Sorted.</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-page: #f8faf9;
+      --bg-card: #ffffff;
+      --ink-900: #0f1714;
+      --ink-700: #2c3a34;
+      --ink-muted: #5e7066;
+      --border-card: #e2e8f0;
+      --green-600: #167a49;
+      --green-500: #10b981;
+      --green-100: #ecfdf5;
+      --font-heading: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'DM Mono', monospace;
+    }
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 86px;
+    }
+    #features,
+    #how-it-works,
+    #security,
+    .landing-section {
+      scroll-margin-top: 86px;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: var(--bg-page);
+      color: var(--ink-900);
+      font-family: var(--font-body);
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+    }
+    .topbar {
+      background: #0e1e17;
+      border-bottom: 1px solid #1f4233;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    }
+    .topbar-inner {
+      max-width: 1240px;
+      margin: 0 auto;
+      height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: #fff;
+    }
+    .brand-title {
+      font-family: var(--font-heading);
+      font-size: 17px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+    .brand-title span {
+      color: var(--green-500);
+    }
+    .brand-tag {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      color: #94a3b8;
+    }
+    .top-nav {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .top-nav a {
+      color: #cbd5e1;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      transition: color 0.15s;
+    }
+    .top-nav a:hover {
+      color: #ffffff;
+    }
+    .btn-nav-primary {
+      background: var(--green-500);
+      color: #042f2e !important;
+      padding: 8px 18px;
+      border-radius: 6px;
+      font-weight: 700 !important;
+    }
+    .page-container {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 32px 24px 60px;
+    }
+    .landing-hero {
+      background: linear-gradient(135deg, #0e1e17 0%, #153426 50%, #0d1713 100%);
+      border-radius: 16px;
+      padding: 64px 36px;
+      color: #ffffff;
+      margin-bottom: 40px;
+      border: 1px solid #1f4233;
+      box-shadow: 0 12px 36px rgba(14,30,23,0.25);
+      text-align: center;
+    }
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(52, 211, 153, 0.12);
+      border: 1px solid rgba(52, 211, 153, 0.28);
+      padding: 5px 14px;
+      border-radius: 20px;
+      color: #34d399;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 22px;
+    }
+    .hero-title {
+      font-family: var(--font-heading);
+      font-size: 46px;
+      line-height: 1.15;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      margin-bottom: 18px;
+    }
+    .hero-title span {
+      background: linear-gradient(135deg, #34d399 0%, #a7f3d0 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero-subtitle {
+      font-size: 16px;
+      line-height: 1.6;
+      color: #cbd5e1;
+      max-width: 720px;
+      margin: 0 auto 32px;
+    }
+    .hero-cta-group {
+      display: flex;
+      justify-content: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-bottom: 36px;
+    }
+    .btn-hero-primary {
+      background: #10b981;
+      color: #042f2e;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 14px;
+      text-decoration: none;
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+      transition: all 0.2s;
+    }
+    .btn-hero-primary:hover {
+      background: #34d399;
+      transform: translateY(-2px);
+    }
+    .btn-hero-secondary {
+      background: rgba(255, 255, 255, 0.1);
+      color: #ffffff;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      text-decoration: none;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      transition: all 0.2s;
+    }
+    .btn-hero-secondary:hover {
+      background: rgba(255, 255, 255, 0.2);
+      transform: translateY(-2px);
+    }
+    .btn-hero-outline {
+      background: transparent;
+      color: #a7f3d0;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      text-decoration: none;
+      border: 1px solid rgba(167, 243, 208, 0.3);
+      transition: all 0.2s;
+    }
+    .btn-hero-outline:hover {
+      background: rgba(167, 243, 208, 0.1);
+      color: #ffffff;
+    }
+    .metrics-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 12px;
+      background: rgba(14, 30, 23, 0.6);
+      border: 1px solid rgba(52, 211, 153, 0.2);
+      border-radius: 10px;
+      padding: 16px;
+      max-width: 860px;
+      margin: 0 auto;
+    }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 20px;
+      margin-bottom: 50px;
+    }
+    .feature-card {
+      background: #ffffff;
+      border: 1px solid var(--border-card);
+      border-radius: 10px;
+      padding: 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+    }
+    .workflow-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px;
+    }
+    .workflow-card {
+      background: #f8fafc;
+      border: 1px solid var(--border-card);
+      border-radius: 8px;
+      padding: 20px;
+    }
+    .persona-cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin-top: 20px;
+    }
+    .persona-launch-card {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+    }
+    .back-to-top {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: 44px;
+      height: 44px;
+      background: #0e1e17;
+      color: #34d399;
+      border: 1px solid #1f4233;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 18px;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+      transition: all 0.25s ease;
+      z-index: 999;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(10px);
+    }
+    .back-to-top.visible {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+    .back-to-top:hover {
+      background: #10b981;
+      color: #042f2e;
+      transform: translateY(-3px);
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+    }
+    .footer {
+      background: #0e1e17;
+      border-top: 1px solid #1f4233;
+      padding: 40px 24px;
+      color: #94a3b8;
+      font-size: 13px;
+    }
+    .footer-inner {
+      max-width: 1240px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+  </style>
+</head>
+<body id="top">
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#top">
+      <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(52,211,153,0.15); border: 1px solid #34d399; display: flex; align-items: center; justify-content: center; color: #34d399; font-weight: 800;">
+        🧾
+      </div>
+      <div>
+        <div class="brand-title">Receipt<span>Graveyard</span></div>
+        <div class="brand-tag">AI EXPENSE MANAGEMENT & REIMBURSEMENT</div>
+      </div>
+    </a>
+
+    <nav class="top-nav">
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How It Works</a>
+      <a href="#security">Security</a>
+      <a href="http://127.0.0.1:5000/login">Sign In</a>
+      <a href="http://127.0.0.1:5000/register" class="btn-nav-primary">Get Started</a>
+    </nav>
+  </div>
+</header>
+
+<main class="page-container">
+  
+  <!-- HERO SECTION -->
+  <section class="landing-hero">
+    <div class="hero-eyebrow">
+      <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #34d399;"></span>
+      AI EXPENSE AUDITOR · POLICY COMPLIANCE · REIMBURSEMENT
+    </div>
+
+    <h1 class="hero-title">
+      Receipts in. <br>
+      <span>Reimbursements sorted.</span>
+    </h1>
+
+    <p class="hero-subtitle">
+      Turn paper receipts into structured expense claims. Detect duplicates, validate company policies, and simplify reimbursement reviews with intelligent receipt processing.
+    </p>
+
+    <div class="hero-cta-group">
+      <a href="http://127.0.0.1:5000/register" class="btn-hero-primary">
+        Get Started →
+      </a>
+      <a href="#how-it-works" class="btn-hero-secondary">
+        See How It Works ↓
+      </a>
+      <a href="http://127.0.0.1:5000/login" class="btn-hero-outline">
+        Sign In to Portal →
+      </a>
+    </div>
+
+    <div class="metrics-bar">
+      <div>
+        <div style="font-size: 20px; font-weight: 800; color: #34d399; font-family: var(--font-mono);">RapidOCR</div>
+        <div style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Neural Vision</div>
+      </div>
+      <div>
+        <div style="font-size: 20px; font-weight: 800; color: #34d399; font-family: var(--font-mono);">64-bit</div>
+        <div style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Perceptual dHash</div>
+      </div>
+      <div>
+        <div style="font-size: 20px; font-weight: 800; color: #34d399; font-family: var(--font-mono);">100%</div>
+        <div style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Deterministic Caps</div>
+      </div>
+      <div>
+        <div style="font-size: 20px; font-weight: 800; color: #34d399; font-family: var(--font-mono);">Dual-Proof</div>
+        <div style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Bill + UPI Match</div>
+      </div>
+      <div>
+        <div style="font-size: 20px; font-weight: 800; color: #34d399; font-family: var(--font-mono);">RBAC</div>
+        <div style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Admin Approval Gate</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES SECTION -->
+  <section id="features" class="landing-section" style="margin-bottom: 50px;">
+    <div style="text-align: center; margin-bottom: 36px;">
+      <div style="font-size: 11px; font-weight: 700; color: #047857; text-transform: uppercase; letter-spacing: 0.08em;">CORE CAPABILITIES</div>
+      <h2 style="font-size: 30px; font-weight: 800; color: #0f172a; margin-top: 6px; letter-spacing: -0.02em;">
+        Engineered for Complete Expense Integrity
+      </h2>
+      <p style="font-size: 15px; color: #64748b; max-width: 680px; margin: 8px auto 0;">
+        Six implemented capabilities designed for corporate policy enforcement, automated auditing, and finance team productivity.
+      </p>
+    </div>
+
+    <div class="features-grid">
+      <div class="feature-card">
+        <div style="width: 40px; height: 40px; border-radius: 8px; background: #ecfdf5; color: #047857; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 14px;">📷</div>
+        <h3 style="font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 8px;">1. Smart Receipt Scanning</h3>
+        <p style="font-size: 13px; line-height: 1.5; color: #475569;">
+          Upload or photograph an itemized paper receipt. The multi-stage pipeline applies skew correction, contrast enhancement, and neural OCR to extract merchant, date, amount, currency, and line items.
+        </p>
+      </div>
+
+      <div class="feature-card">
+        <div style="width: 40px; height: 40px; border-radius: 8px; background: #f0fdf4; color: #166534; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 14px;">⚖️</div>
+        <h3 style="font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 8px;">2. Policy Validation</h3>
+        <p style="font-size: 13px; line-height: 1.5; color: #475569;">
+          Evaluate every expense claim against structured company policy rules, destination city meal per-diems, home office local caps, and project reimbursement thresholds using decimal-accurate arithmetic.
+        </p>
+      </div>
+
+      <div class="feature-card">
+        <div style="width: 40px; height: 40px; border-radius: 8px; background: #fffbeb; color: #b45309; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 14px;">🛡️</div>
+        <h3 style="font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 8px;">3. Duplicate Detection</h3>
+        <p style="font-size: 13px; line-height: 1.5; color: #475569;">
+          Identify potential duplicate receipts and transactions through exact SHA-256 byte hashes, 64-bit perceptual difference hashes (dHash), recycled UPI references, and cross-employee collusion checks.
+        </p>
+      </div>
+
+      <div class="feature-card">
+        <div style="width: 40px; height: 40px; border-radius: 8px; background: #eff6ff; color: #1d4ed8; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 14px;">⚡</div>
+        <h3 style="font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 8px;">4. Approval Workflow</h3>
+        <p style="font-size: 13px; line-height: 1.5; color: #475569;">
+          Route compliant claims at or below per-person project caps to automatic approval. Claims exceeding caps or triggering risk flags automatically route to Accounts personnel for detailed review.
+        </p>
+      </div>
+
+      <div class="feature-card">
+        <div style="width: 40px; height: 40px; border-radius: 8px; background: #fdf4ff; color: #86198f; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 14px;">📊</div>
+        <h3 style="font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 8px;">5. Expense Tracking</h3>
+        <p style="font-size: 13px; line-height: 1.5; color: #475569;">
+          Track explicit claim lifecycles from draft, submission, Accounts review, and document requests, through approval and actual reimbursement with full status visibility and in-app notifications.
+        </p>
+      </div>
+
+      <div class="feature-card">
+        <div style="width: 40px; height: 40px; border-radius: 8px; background: #f8fafc; color: #334155; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 14px;">📜</div>
+        <h3 style="font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 8px;">6. Auditability</h3>
+        <p style="font-size: 13px; line-height: 1.5; color: #475569;">
+          Preserve immutable claim history, receipt versions, original uploaded documents, reviewer notes, and human field corrections with complete actor, timestamp, and rationale attribution.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS SECTION -->
+  <section id="how-it-works" class="landing-section" style="background: #ffffff; border: 1px solid var(--border-card); border-radius: 12px; padding: 40px 30px; margin-bottom: 50px;">
+    <div style="text-align: center; margin-bottom: 36px;">
+      <div style="font-size: 11px; font-weight: 700; color: #047857; text-transform: uppercase; letter-spacing: 0.08em;">TRANSPARENT PROCESS</div>
+      <h2 style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 6px; letter-spacing: -0.02em;">How It Works</h2>
+      <p style="font-size: 15px; color: #64748b; max-width: 600px; margin: 8px auto 0;">
+        A concise four-step workflow from paper bill to verified corporate reimbursement.
+      </p>
+    </div>
+
+    <div class="workflow-grid">
+      <div class="workflow-card">
+        <div style="font-size: 26px; font-weight: 800; color: #047857; font-family: var(--font-mono); margin-bottom: 8px;">01</div>
+        <h4 style="font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">1. Upload a Receipt</h4>
+        <p style="font-size: 13px; color: #64748b; line-height: 1.5;">
+          Photograph an itemized bill or upload an image/PDF document along with digital payment proof (UPI or Card).
+        </p>
+      </div>
+
+      <div class="workflow-card">
+        <div style="font-size: 26px; font-weight: 800; color: #047857; font-family: var(--font-mono); margin-bottom: 8px;">02</div>
+        <h4 style="font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">2. Review Extracted Information</h4>
+        <p style="font-size: 13px; color: #64748b; line-height: 1.5;">
+          Inspect detected merchant, date, and amount. Accept the extracted values or make manual corrections before submitting.
+        </p>
+      </div>
+
+      <div class="workflow-card">
+        <div style="font-size: 26px; font-weight: 800; color: #047857; font-family: var(--font-mono); margin-bottom: 8px;">03</div>
+        <h4 style="font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">3. Validate Policy & Caps</h4>
+        <p style="font-size: 13px; color: #64748b; line-height: 1.5;">
+          The backend verifies project reimbursement caps, home office meal limits, non-reimbursables, and duplicate flags.
+        </p>
+      </div>
+
+      <div class="workflow-card">
+        <div style="font-size: 26px; font-weight: 800; color: #047857; font-family: var(--font-mono); margin-bottom: 8px;">04</div>
+        <h4 style="font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">4. Track & Reimburse</h4>
+        <p style="font-size: 13px; color: #64748b; line-height: 1.5;">
+          Compliant claims auto-approve; exceptions route to Accounts review. Follow live progress through final payment disbursement.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- TRUST AND SECURITY SECTION -->
+  <section id="security" class="landing-section" style="margin-bottom: 50px;">
+    <div style="text-align: center; margin-bottom: 36px;">
+      <div style="font-size: 11px; font-weight: 700; color: #047857; text-transform: uppercase; letter-spacing: 0.08em;">SECURITY & GOVERNANCE</div>
+      <h2 style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 6px; letter-spacing: -0.02em;">
+        Trust, Access Control & Data Protection
+      </h2>
+      <p style="font-size: 15px; color: #64748b; max-width: 620px; margin: 8px auto 0;">
+        Implemented security mechanisms safeguarding corporate funds and preserving financial integrity.
+      </p>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px;">
+      <div style="background: #ffffff; border: 1px solid var(--border-card); border-radius: 8px; padding: 20px;">
+        <div style="font-size: 18px; margin-bottom: 8px;">🔐</div>
+        <h4 style="font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">Backend-Enforced RBAC</h4>
+        <p style="font-size: 13px; color: #475569; line-height: 1.5;">
+          Strict server-side role separation. Employees cannot access private receipts of other staff, approve their own claims, or elevate privileges.
+        </p>
+      </div>
+
+      <div style="background: #ffffff; border: 1px solid var(--border-card); border-radius: 8px; padding: 20px;">
+        <div style="font-size: 18px; margin-bottom: 8px;">🛡️</div>
+        <h4 style="font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">Administrator Approval Gate</h4>
+        <p style="font-size: 13px; color: #475569; line-height: 1.5;">
+          Public registration creates pending accounts. No employee or accounts user can access protected dashboards until reviewed by an authorized Admin.
+        </p>
+      </div>
+
+      <div style="background: #ffffff; border: 1px solid var(--border-card); border-radius: 8px; padding: 20px;">
+        <div style="font-size: 18px; margin-bottom: 8px;">📁</div>
+        <h4 style="font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">Cryptographic Document Integrity</h4>
+        <p style="font-size: 13px; color: #475569; line-height: 1.5;">
+          Every receipt is hashed with SHA-256 for exact bitwise verification and 64-bit difference hashing (dHash) to detect cropped or re-photographed bills.
+        </p>
+      </div>
+
+      <div style="background: #ffffff; border: 1px solid var(--border-card); border-radius: 8px; padding: 20px;">
+        <div style="font-size: 18px; margin-bottom: 8px;">📜</div>
+        <h4 style="font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">Immutable Audit History</h4>
+        <p style="font-size: 13px; color: #475569; line-height: 1.5;">
+          Every claim lifecycle event, reviewer action, document request, and resubmission records the actor, timestamp, and rationale in a versioned audit trail.
+        </p>
+      </div>
+    </div>
+  </section>
+
+
+
+  <!-- QUICK START / LAUNCH BANNER -->
+  <section style="background: #0f172a; border-radius: 12px; padding: 40px 30px; text-align: center; color: #ffffff;">
+    <h2 style="font-size: 26px; font-weight: 800; margin-bottom: 8px; letter-spacing: -0.02em;">
+      Launch The Receipt Graveyard Platform
+    </h2>
+    <p style="font-size: 15px; color: #94a3b8; max-width: 580px; margin: 0 auto 24px;">
+      Sign in with pre-seeded hackathon judging personas (Admin, Accounts, Employee) or register a new account.
+    </p>
+    <div style="display: flex; justify-content: center; gap: 14px; flex-wrap: wrap;">
+      <a href="http://127.0.0.1:5000/login" class="btn-hero-primary" style="display: inline-block;">
+        Open Web Application (http://127.0.0.1:5000) →
+      </a>
+      <a href="http://127.0.0.1:5000/register" class="btn-hero-secondary" style="display: inline-block;">
+        Staff Registration Form
+      </a>
+    </div>
+  </section>
+
+</main>
+
+<a href="#top" id="backToTopBtn" class="back-to-top" title="Back to top" aria-label="Back to top">↑</a>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <div>
+      <strong style="color: #ffffff;">THE RECEIPT GRAVEYARD</strong>
+      <div style="font-size: 12px; margin-top: 4px;">AI-Powered Expense Management, Receipt Intelligence, and Employee Reimbursement Platform.</div>
+    </div>
+    <div style="display: flex; gap: 16px;">
+      <a href="http://127.0.0.1:5000/login" style="color: #cbd5e1; text-decoration: none;">Sign In</a>
+      <a href="http://127.0.0.1:5000/register" style="color: #cbd5e1; text-decoration: none;">Register</a>
+      <a href="#features" style="color: #cbd5e1; text-decoration: none;">Features</a>
+      <a href="#how-it-works" style="color: #cbd5e1; text-decoration: none;">How It Works</a>
+      <a href="#security" style="color: #cbd5e1; text-decoration: none;">Security</a>
+    </div>
+    <div>
+      © 2026 The Receipt Graveyard. Hackathon Demonstration Release.
+    </div>
+  </div>
+</footer>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const topbar = document.querySelector('.topbar');
+    const backToTopBtn = document.getElementById('backToTopBtn');
+
+    window.addEventListener('scroll', function () {
+      if (window.pageYOffset > 320) {
+        if (backToTopBtn) backToTopBtn.classList.add('visible');
+      } else {
+        if (backToTopBtn) backToTopBtn.classList.remove('visible');
+      }
+    }, { passive: true });
+
+    document.querySelectorAll('a[href^="#"]').forEach(function (anchor) {
+      anchor.addEventListener('click', function (e) {
+        const href = this.getAttribute('href');
+        if (!href || href === '#') return;
+        
+        if (href === '#top') {
+          e.preventDefault();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          history.pushState(null, '', window.location.pathname);
+          return;
+        }
+
+        const targetId = href.slice(1);
+        const targetEl = document.getElementById(targetId);
+        if (targetEl) {
+          e.preventDefault();
+          const headerHeight = topbar ? topbar.offsetHeight : 72;
+          const targetY = targetEl.getBoundingClientRect().top + window.pageYOffset - (headerHeight + 14);
+          window.scrollTo({
+            top: Math.max(0, targetY),
+            behavior: 'smooth'
+          });
+          history.pushState(null, '', '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+</body>
+</html>

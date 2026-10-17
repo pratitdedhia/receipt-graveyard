@@ -46,12 +46,18 @@ class ReceiptGraveyardCompleteTestSuite(unittest.TestCase):
         init_db()
         with connect() as con:
             con.execute("DELETE FROM expenses WHERE transaction_ref LIKE 'UTR_%' OR merchant LIKE '%Supplies %' OR merchant LIKE '%Cafe %'")
+            con.execute("DELETE FROM budget_ledger")
+            con.execute("DELETE FROM allocation_adjustments")
+            con.execute("UPDATE project_allocations SET approved_expenditure = 0.0, remaining_balance = allocated_cap")
             con.commit()
 
     @classmethod
     def tearDownClass(cls):
         with connect() as con:
             con.execute("DELETE FROM expenses WHERE transaction_ref LIKE 'UTR_%' OR merchant LIKE '%Supplies %' OR merchant LIKE '%Cafe %'")
+            con.execute("DELETE FROM budget_ledger")
+            con.execute("DELETE FROM allocation_adjustments")
+            con.execute("UPDATE project_allocations SET approved_expenditure = 0.0, remaining_balance = allocated_cap")
             con.commit()
 
     def test_01_user_creation_and_role_assignment(self):
@@ -552,6 +558,158 @@ Rohan Verma,rohan.verma@company.com,2026-10-10,Cafe Coffee Day,650.00,INR,Meals,
             }
             for expected in expected_files:
                 self.assertIn(expected, file_names, f"Missing {expected} in standardized export archive!")
+
+    def test_26_landing_page_and_role_based_flow(self):
+        """Test 26: Public landing page, auth gating, and role-based redirection."""
+        # 1. Unauthenticated visitor at root '/' sees the public landing page
+        with self.client.session_transaction() as sess:
+            sess.clear()
+
+        res_root = self.client.get("/")
+        self.assertEqual(res_root.status_code, 200)
+        self.assertIn(b"Receipts in", res_root.data)
+        self.assertIn(b"features", res_root.data)
+        self.assertIn(b"how-it-works", res_root.data)
+
+        # 2. Public /landing route also serves the landing page
+        res_landing = self.client.get("/landing")
+        self.assertEqual(res_landing.status_code, 200)
+        self.assertIn(b"Receipts in", res_landing.data)
+
+        # 3. Authenticated Admin visiting '/' is routed to /admin
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = 1
+            sess["role"] = "admin"
+            sess["user_name"] = "Rajesh Sharma"
+        res_admin_root = self.client.get("/", follow_redirects=False)
+        self.assertEqual(res_admin_root.status_code, 302)
+        self.assertIn("/admin", res_admin_root.headers.get("Location", ""))
+
+        # 4. Authenticated Accounts reviewer visiting '/' is routed to /dashboard
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = 2
+            sess["role"] = "accounts"
+            sess["user_name"] = "Priya Nair"
+        res_acc_root = self.client.get("/", follow_redirects=False)
+        self.assertEqual(res_acc_root.status_code, 302)
+        self.assertIn("/dashboard", res_acc_root.headers.get("Location", ""))
+
+        # 5. Authenticated Employee visiting '/' is routed to /dashboard (My Claims)
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = 4
+            sess["role"] = "employee"
+            sess["user_name"] = "Aarav Mehta"
+        res_emp_root = self.client.get("/", follow_redirects=False)
+        self.assertEqual(res_emp_root.status_code, 302)
+        self.assertIn("/dashboard", res_emp_root.headers.get("Location", ""))
+
+        # 6. Admin login redirects to /admin
+        with self.client.session_transaction() as sess:
+            sess.clear()
+        res_admin_login = self.client.post("/login", data={
+            "email": "admin@company.com",
+            "password": "admin123"
+        }, follow_redirects=False)
+        self.assertEqual(res_admin_login.status_code, 302)
+        self.assertIn("/admin", res_admin_login.headers.get("Location", ""))
+
+        # 7. Employee login redirects to /dashboard
+        with self.client.session_transaction() as sess:
+            sess.clear()
+        res_emp_login = self.client.post("/login", data={
+            "email": "aarav@company.com",
+            "password": "employee123"
+        }, follow_redirects=False)
+        self.assertEqual(res_emp_login.status_code, 302)
+        self.assertIn("/dashboard", res_emp_login.headers.get("Location", ""))
+
+        # 8. Logout clears session and redirects to '/' (Landing page)
+        res_logout = self.client.get("/logout", follow_redirects=False)
+        self.assertEqual(res_logout.status_code, 302)
+        self.assertEqual(res_logout.headers.get("Location"), "/")
+
+    def test_27_registration_and_admin_approval_gate(self):
+        """Test 27: New registration creates PENDING_APPROVAL account; Admin approval required before login."""
+        # 1. Register candidate employee
+        email = f"suite.candidate.{int(time.time())}@company.com"
+        res_reg = self.client.post("/register", data={
+            "name": "Suite Candidate",
+            "email": email,
+            "password": "Password2026!",
+            "confirm_password": "Password2026!",
+            "role": "employee",
+            "employee_id": f"EMP-SUITE-{int(time.time())%10000}",
+            "department": "Engineering",
+            "designation": "Associate Engineer",
+            "office_id": 1
+        }, follow_redirects=False)
+        self.assertEqual(res_reg.status_code, 302)
+        self.assertIn("/registration-pending", res_reg.headers.get("Location", ""))
+
+        # 2. Verify account is PENDING_APPROVAL and not active
+        with connect() as con:
+            user = con.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
+            self.assertIsNotNone(user)
+            self.assertEqual(user["status"], "PENDING_APPROVAL")
+            self.assertEqual(user["is_active"], 0)
+
+        # 3. Attempting login must be blocked with awaiting approval notice
+        res_pending_login = self.client.post("/login", data={
+            "email": email,
+            "password": "Password2026!"
+        }, follow_redirects=True)
+        self.assertIn(b"awaiting administrator approval", res_pending_login.data)
+
+        # 4. Admin approves the user
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = 1
+            sess["role"] = "admin"
+            sess["user_name"] = "Rajesh Sharma"
+        res_approve = self.client.post(f"/admin/users/{user['id']}/approve", follow_redirects=False)
+        self.assertEqual(res_approve.status_code, 302)
+
+        with connect() as con:
+            user_approved = con.execute("SELECT * FROM users WHERE id=?", (user["id"],)).fetchone()
+            self.assertEqual(user_approved["status"], "APPROVED")
+            self.assertEqual(user_approved["is_active"], 1)
+
+        # 5. Now user can log in and gets redirected to dashboard
+        with self.client.session_transaction() as sess:
+            sess.clear()
+        res_approved_login = self.client.post("/login", data={
+            "email": email,
+            "password": "Password2026!"
+        }, follow_redirects=False)
+        self.assertEqual(res_approved_login.status_code, 302)
+        self.assertIn("/dashboard", res_approved_login.headers.get("Location", ""))
+
+    def test_28_ocr_scan_receipt_endpoint(self):
+        """Test 28: RapidOCR API endpoint /api/scan-receipt parses real receipt image."""
+        import os
+        from pathlib import Path
+        sample_path = Path("uploads/sample_receipt_theobroma.png")
+        if sample_path.exists():
+            with open(sample_path, "rb") as f:
+                res = self.client.post("/api/scan-receipt", data={
+                    "receipt": (io.BytesIO(f.read()), "sample_receipt_theobroma.png")
+                }, content_type="multipart/form-data")
+            self.assertEqual(res.status_code, 200)
+            data = res.get_json()
+            self.assertTrue(data.get("success"))
+            sug = data.get("suggested", {})
+            self.assertEqual(sug.get("amount"), 780.0)
+            self.assertEqual(sug.get("currency"), "INR")
+            self.assertIn("THEOBROMA", (sug.get("merchant") or "").upper())
+
+    def test_29_health_check_endpoint(self):
+        """Test 29: Production health-check endpoints /health and /api/health."""
+        for endpoint in ["/health", "/api/health"]:
+            res = self.client.get(endpoint)
+            self.assertEqual(res.status_code, 200)
+            data = res.get_json()
+            self.assertEqual(data.get("status"), "healthy")
+            self.assertEqual(data.get("database"), "connected")
+            self.assertIn("service", data)
 
 if __name__ == "__main__":
     unittest.main()

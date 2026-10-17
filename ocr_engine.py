@@ -34,12 +34,18 @@ try:
 except ImportError:
     HAS_PADDLEOCR = False
 
+try:
+    from rapidocr_onnxruntime import RapidOCR
+    HAS_RAPIDOCR = True
+except ImportError:
+    HAS_RAPIDOCR = False
+
 from policy import POLICY
 
 logger = logging.getLogger(__name__)
 
 # Configurable environment settings
-OCR_PROVIDER = os.environ.get("OCR_PROVIDER", "paddleocr").lower()
+OCR_PROVIDER = os.environ.get("OCR_PROVIDER", "rapidocr").lower()
 OCR_FALLBACK_PROVIDER = os.environ.get("OCR_FALLBACK_PROVIDER", "tesseract").lower()
 OCR_MIN_CONFIDENCE = float(os.environ.get("OCR_MIN_CONFIDENCE", "0.70"))
 MAX_IMAGE_PIXELS = int(os.environ.get("OCR_MAX_IMAGE_PIXELS", "40000000"))
@@ -203,6 +209,37 @@ class BaseOCREngine:
     def get_name(self):
         return self.__class__.__name__
 
+class RapidOCREngine(BaseOCREngine):
+    """High-accuracy self-contained OCR engine powered by ONNX Runtime."""
+    def __init__(self):
+        self._ocr = None
+
+    def _init_model(self):
+        if self._ocr is None and HAS_RAPIDOCR:
+            try:
+                self._ocr = RapidOCR()
+            except Exception as e:
+                logger.error(f"Failed to initialize RapidOCR: {e}")
+                self._ocr = False
+
+    def extract_text(self, file_path):
+        self._init_model()
+        if not self._ocr:
+            return "", 0.0, "RapidOCR engine unavailable."
+
+        try:
+            result, elapse = self._ocr(str(file_path))
+            if not result:
+                return "", 0.0, "RapidOCR detected no legible text."
+
+            lines = [r[1] for r in result if r and len(r) > 1 and r[1]]
+            confs = [float(r[2]) for r in result if r and len(r) > 2]
+            full_text = "\n".join(lines)
+            avg_conf = round(sum(confs) / len(confs), 3) if confs else 0.85
+            return full_text, avg_conf, f"RapidOCR extracted {len(lines)} lines (avg conf: {avg_conf:.1%})"
+        except Exception as e:
+            return "", 0.0, f"RapidOCR error: {str(e)}"
+
 class PaddleOCREngine(BaseOCREngine):
     """PaddleOCR high-accuracy document engine."""
     def __init__(self):
@@ -301,16 +338,20 @@ def get_ocr_engine(requested_provider=None):
     """Selects and instantiates the appropriate OCR engine based on configuration and availability."""
     provider = (requested_provider or OCR_PROVIDER).lower()
     
-    if provider == "paddleocr" and HAS_PADDLEOCR:
+    if provider in ("rapidocr", "paddleocr", "default", "auto") and HAS_RAPIDOCR:
+        return RapidOCREngine()
+    elif provider == "paddleocr" and HAS_PADDLEOCR:
         return PaddleOCREngine()
     elif provider == "tesseract" and HAS_PYTESSERACT:
         return TesseractOCREngine()
     elif provider in ("cloud", "documentai"):
         return CloudDocumentAIEngine()
+    elif HAS_RAPIDOCR:
+        return RapidOCREngine()
     elif HAS_PYTESSERACT:
         return TesseractOCREngine()
     else:
-        return TesseractOCREngine()
+        return RapidOCREngine() if HAS_RAPIDOCR else TesseractOCREngine()
 
 def extract_raw_text(file_path, provider=None):
     """

@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+{% block title %}The Receipt Graveyard · Receipts In. Reimbursements Sorted.{% endblock %}
+
+{% block content %}
+<div class="landing-wrapper" id="top">
+  
+  <!-- HERO SECTION -->
+  <section class="landing-hero" style="background: linear-gradient(135deg, #0e1e17 0%, #153426 50%, #0d1713 100%); border-radius: 16px; padding: 64px 36px; color: #ffffff; position: relative; margin-bottom: 40px; border: 1px solid #1f4233; box-shadow: 0 12px 36px rgba(14,30,23,0.25);">
+    <div class="hero-content" style="max-width: 860px; margin: 0 auto; text-align: center;">
+      
+      <div class="hero-eyebrow" style="display: inline-flex; align-items: center; gap: 8px; background: rgba(52, 211, 153, 0.12); border: 1px solid rgba(52, 211, 153, 0.28); padding: 5px 14px; border-radius: 20px; color: #34d399; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 22px;">
+        <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #34d399;"></span>
+        AI EXPENSE AUDITOR · POLICY COMPLIANCE · FRAUD DEFENSE
+      </div>
+
+      <h1 class="hero-title" style="font-size: 46px; line-height: 1.15; font-weight: 800; color: #ffffff; letter-spacing: -0.025em; margin-bottom: 18px;">
+        Receipts in. <br>
+        <span style="background: linear-gradient(135deg, #34d399 0%, #a7f3d0 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+          Reimbursements sorted.
+        </span>
+      </h1>
+
+      <p class="hero-subtitle" style="font-size: 16px; line-height: 1.6; color: #cbd5e1; max-width: 720px; margin: 0 auto 32px;">
+        Turn paper receipts into structured expense claims. Detect duplicates, validate company policies, and simplify reimbursement reviews with intelligent receipt processing.
+      </p>
+
+      <div class="hero-cta-group" style="display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; margin-bottom: 36px;">
+        <a href="{{ url_for('register') }}" class="btn btn-hero-primary" style="background: #10b981; color: #042f2e; padding: 12px 28px; border-radius: 8px; font-weight: 700; font-size: 14px; text-decoration: none; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);">
+          Get Started →
+        </a>
+        <a href="#how-it-works" class="btn btn-hero-secondary" style="background: rgba(255, 255, 255, 0.1); color: #ffffff; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 14px; text-decoration: none; border: 1px solid rgba(255, 255, 255, 0.25);">
+          See How It Works ↓
+        </a>
+        <a href="{{ url_for('login') }}" class="btn btn-hero-outline" style="background: transparent; color: #a7f3d0; padding: 12px 22px; border-radius: 8px; font-weight: 600; font-size: 14px; text-decoration: none; border: 1px solid rgba(167, 243, 208, 0.3);">
+          Sign In to Portal →
+        </a>
+      </div>
+
+      <!-- Real Operational Metrics -->
+      <div class="hero-metrics-bar" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; background: rgba(14, 30, 23, 0.6); border: 1px solid rgba(52, 211, 153, 0.2); border-radius: 10px; padding: 16px;">
+        <div>
+          <div style="font-size: 20px; font-weight: 800; color: #34d399;" class="font-mono">RapidOCR</div>
+          <div style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Neural Vision</div>
+        </div>
+        <div>
+          <div style="font-size: 20px; font-weight: 800; color: #34d399;" class="font-mono">64-bit</div>
+          <div style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Perceptual dHash</div>
+        </div>
+        <div>
+          <div style="font-size: 20px; font-weight: 800; color: #34d399;" class="font-mono">100%</div>
+          <div style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Deterministic Caps</div>
+        </div>
+        <div>
+          <div style="font-size: 20px; font-weight: 800; color: #34d399;" class="font-mono">Dual-Proof</div>
+          <div style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Bill + UPI Match</div>
+        </div>
+        <div>
+          <div style="font-size: 20px; font-weight: 800; color: #34d399;" class="font-mono">RBAC</div>
+          <div style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Admin Gate</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- FEATURES SECTION -->
+  <section id="features" class="landing-section" style="margin-bottom: 50px;">
+    <div class="section-head text-center" style="text-align: center; margin-bottom: 36px;">
+      <span class="card-eyebrow" style="font-size: 11px; font-weight: 700; color: #047857; text-transform: uppercase; letter-spacing: 0.08em;">
+        CORE CAPABILITIES
+      </span>
+      <h2 class="section-title" style="font-size: 30px; font-weight: 800; color: #0f172a; margin-top: 6px; letter-spacing: -0.02em;">
+        Engineered for Complete Expense Integrity
+      </h2>
+      <p class="section-sub" style="font-size: 15px; color: #64748b; max-width: 680px; margin: 8px auto 0;">
+        Six purpose-built capabilities designed for corporate policy enforcement, automated auditing, and finance team productivity.
+      </p>
+    </div>
+
+    <div class="features-grid-3x2" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
+      
+      <!-- Feature 1 -->
+      <div class="feature-card" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+        <div style="width: 42px; height: 42px; border-radius: 8px; background: #ecfdf5; color: #047857; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 16px;">
+          📷
+        </div>
+        <h3 style="font-size: 17px; font-weight: 700; color: #0f172a; margin-bottom: 8px;">1. Smart Receipt Scanning</h3>
+        <p style="font-size: 14px; line-height: 1.5; color: #475569; margin-bottom: 12px;">
+          Upload or photograph an itemized paper receipt or invoice. The multi-stage pipeline applies skew correction, contrast enhancement, and neural OCR to extract merchant, date, amount, currency, and line items.
+        </p>
+        <span class="status-pill status-approved" style="font-size: 11px;">RapidOCR & Native PDF Support</span>
+      </div>
+
+      <!-- Feature 2 -->
+      <div class="feature-card" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+        <div style="width: 42px; height: 42px; border-radius: 8px; background: #f0fdf4; color: #166534; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 16px;">
+          ⚖️
+        </div>
+        <h3 style="font-size: 17px; font-weight: 700; color: #0f172a; margin-bottom: 8px;">2. Policy Validation</h3>
+        <p style="font-size: 14px; line-height: 1.5; color: #475569; margin-bottom: 12px;">
+          Evaluate every expense claim against structured company policy rules, destination city meal per-diems, home office local caps, and project reimbursement thresholds using decimal-accurate arithmetic.
+        </p>
+        <span class="status-pill status-approved" style="font-size: 11px;">100% Deterministic Rules</span>
+      </div>
+
+      <!-- Feature 3 -->
+      <div class="feature-card" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+        <div style="width: 42px; height: 42px; border-radius: 8px; background: #fffbeb; color: #b45309; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 16px;">
+          🛡️
+        </div>
+        <h3 style="font-size: 17px; font-weight: 700; color: #0f172a; margin-bottom: 8px;">3. Duplicate Detection</h3>
+        <p style="font-size: 14px; line-height: 1.5; color: #475569; margin-bottom: 12px;">
+          Identify potential duplicate receipts and transactions through exact SHA-256 byte hashes, 64-bit perceptual difference hashes (dHash), recycled UPI references, and cross-employee collusion checks.
+        </p>
+        <span class="status-pill status-duplicate" style="font-size: 11px;">SHA-256 & Perceptual dHash</span>
+      </div>
+
+      <!-- Feature 4 -->
+      <div class="feature-card" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+        <div style="width: 42px; height: 42px; border-radius: 8px; background: #eff6ff; color: #1d4ed8; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 16px;">
+          ⚡
+        </div>
+        <h3 style="font-size: 17px; font-weight: 700; color: #0f172a; margin-bottom: 8px;">4. Approval Workflow</h3>
+        <p style="font-size: 14px; line-height: 1.5; color: #475569; margin-bottom: 12px;">
+          Route compliant claims at or below per-person project caps to automatic approval. Claims exceeding caps or triggering risk flags automatically route to Accounts personnel for detailed review.
+        </p>
+        <span class="status-pill status-approved" style="font-size: 11px;">Configurable Cap Routing</span>
+      </div>
+
+      <!-- Feature 5 -->
+      <div class="feature-card" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+        <div style="width: 42px; height: 42px; border-radius: 8px; background: #fdf4ff; color: #86198f; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 16px;">
+          📊
+        </div>
+        <h3 style="font-size: 17px; font-weight: 700; color: #0f172a; margin-bottom: 8px;">5. Expense Tracking</h3>
+        <p style="font-size: 14px; line-height: 1.5; color: #475569; margin-bottom: 12px;">
+          Track explicit claim lifecycles from draft, submission, Accounts review, and document requests, through approval and actual reimbursement with full status visibility and in-app notifications.
+        </p>
+        <span class="status-pill status-needs-info" style="font-size: 11px;">Explicit Claim States</span>
+      </div>
+
+      <!-- Feature 6 -->
+      <div class="feature-card" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+        <div style="width: 42px; height: 42px; border-radius: 8px; background: #f8fafc; color: #334155; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 16px;">
+          📜
+        </div>
+        <h3 style="font-size: 17px; font-weight: 700; color: #0f172a; margin-bottom: 8px;">6. Auditability</h3>
+        <p style="font-size: 14px; line-height: 1.5; color: #475569; margin-bottom: 12px;">
+          Preserve immutable claim history, receipt versions, original uploaded documents, reviewer notes, and human field corrections with complete actor, timestamp, and rationale attribution.
+        </p>
+        <span class="status-pill status-approved" style="font-size: 11px;">Full Versioned Audit Trail</span>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS SECTION -->
+  <section id="how-it-works" class="landing-section" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 40px 30px; margin-bottom: 50px;">
+    <div class="section-head text-center" style="text-align: center; margin-bottom: 36px;">
+      <span class="card-eyebrow" style="font-size: 11px; font-weight: 700; color: #047857; text-transform: uppercase; letter-spacing: 0.08em;">
+        TRANSPARENT PROCESS
+      </span>
+      <h2 class="section-title" style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 6px; letter-spacing: -0.02em;">
+        How It Works
+      </h2>
+      <p class="section-sub" style="font-size: 15px; color: #64748b; max-width: 600px; margin: 8px auto 0;">
+        A concise four-step workflow from paper bill to verified corporate reimbursement.
+      </p>
+    </div>
+
+    <div class="workflow-steps-row" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px;">
+      
+      <div class="workflow-step-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; position: relative;">
+        <div style="font-size: 28px; font-weight: 800; color: #047857; font-family: var(--font-mono); margin-bottom: 10px;">01</div>
+        <h4 style="font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">Upload a Receipt</h4>
+        <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin: 0;">
+          Photograph an itemized bill or upload an image/PDF document along with digital payment proof (UPI or Card).
+        </p>
+      </div>
+
+      <div class="workflow-step-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; position: relative;">
+        <div style="font-size: 28px; font-weight: 800; color: #047857; font-family: var(--font-mono); margin-bottom: 10px;">02</div>
+        <h4 style="font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">Review Extracted Info</h4>
+        <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin: 0;">
+          Inspect detected merchant, date, and amount. Accept the extracted values or make manual corrections before submitting.
+        </p>
+      </div>
+
+      <div class="workflow-step-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; position: relative;">
+        <div style="font-size: 28px; font-weight: 800; color: #047857; font-family: var(--font-mono); margin-bottom: 10px;">03</div>
+        <h4 style="font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">Validate Policy & Caps</h4>
+        <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin: 0;">
+          The backend verifies project reimbursement caps, home office meal limits, non-reimbursables, and duplicate flags.
+        </p>
+      </div>
+
+      <div class="workflow-step-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; position: relative;">
+        <div style="font-size: 28px; font-weight: 800; color: #047857; font-family: var(--font-mono); margin-bottom: 10px;">04</div>
+        <h4 style="font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">Track & Reimburse</h4>
+        <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin: 0;">
+          Compliant claims auto-approve; exceptions route to Accounts review. Follow live progress through final payment disbursement.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- TRUST AND SECURITY SECTION -->
+  <section id="security" class="landing-section" style="margin-bottom: 50px;">
+    <div class="section-head text-center" style="text-align: center; margin-bottom: 36px;">
+      <span class="card-eyebrow" style="font-size: 11px; font-weight: 700; color: #047857; text-transform: uppercase; letter-spacing: 0.08em;">
+        FINANCIAL GOVERNANCE & SECURITY
+      </span>
+      <h2 class="section-title" style="font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 6px; letter-spacing: -0.02em;">
+        Trust, Access Control & Data Protection
+      </h2>
+      <p class="section-sub" style="font-size: 15px; color: #64748b; max-width: 620px; margin: 8px auto 0;">
+        Actual implemented security mechanisms safeguarding employee privacy and organizational funds.
+      </p>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px;">
+      
+      <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px;">
+        <div style="font-size: 18px; margin-bottom: 8px;">🔐</div>
+        <h4 style="font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">Backend-Enforced RBAC</h4>
+        <p style="font-size: 13px; color: #475569; line-height: 1.5; margin: 0;">
+          Strict server-side role separation. Employees can never view another employee's private receipts, approve their own claims, or elevate their privileges.
+        </p>
+      </div>
+
+      <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px;">
+        <div style="font-size: 18px; margin-bottom: 8px;">🛡️</div>
+        <h4 style="font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">Administrator Approval Gate</h4>
+        <p style="font-size: 13px; color: #475569; line-height: 1.5; margin: 0;">
+          Public registration does not grant dashboard access. All new staff accounts remain in <code>PENDING_APPROVAL</code> status until verified by an Administrator.
+        </p>
+      </div>
+
+      <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px;">
+        <div style="font-size: 18px; margin-bottom: 8px;">📁</div>
+        <h4 style="font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">Cryptographic Integrity</h4>
+        <p style="font-size: 13px; color: #475569; line-height: 1.5; margin: 0;">
+          Every receipt is hashed with SHA-256 for bitwise tamper detection and 64-bit difference hashing (dHash) to flag cropped or re-photographed bills.
+        </p>
+      </div>
+
+      <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px;">
+        <div style="font-size: 18px; margin-bottom: 8px;">📜</div>
+        <h4 style="font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">Immutable Audit History</h4>
+        <p style="font-size: 13px; color: #475569; line-height: 1.5; margin: 0;">
+          Every state change, document request, resubmission, and approval decision records the actor, timestamp, and rationale in an audit-ready log.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+
+
+  <!-- BOTTOM ACTION BANNER -->
+  <section class="landing-cta-banner" style="background: #0f172a; border-radius: 12px; padding: 40px 30px; text-align: center; color: #ffffff; margin-bottom: 40px;">
+    <h2 style="font-size: 26px; font-weight: 800; margin-bottom: 8px; letter-spacing: -0.02em;">
+      Ready to Streamline Enterprise Expense Auditing?
+    </h2>
+    <p style="font-size: 15px; color: #94a3b8; max-width: 580px; margin: 0 auto 24px;">
+      Register a new employee or accounts account, or sign in to experience the automated auditing and reimbursement workflow.
+    </p>
+    <div style="display: flex; justify-content: center; gap: 14px; flex-wrap: wrap;">
+      <a href="{{ url_for('register') }}" class="btn btn-primary" style="padding: 12px 28px; font-size: 14px; text-decoration: none;">
+        Create Account →
+      </a>
+      <a href="{{ url_for('login') }}" class="btn btn-secondary" style="padding: 12px 28px; font-size: 14px; text-decoration: none; background: rgba(255,255,255,0.1); color: #ffffff; border-color: rgba(255,255,255,0.2);">
+        Sign In to Portal
+      </a>
+    </div>
+  </section>
+
+</div>
+{% endblock %}
