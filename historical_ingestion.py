@@ -351,7 +351,12 @@ def generate_standardized_export_zip(con):
         w = csv.writer(eval_io)
         w.writerow(["claim_id", "status", "risk_score", "flags_count", "flags_summary", "explanation"])
         for e in expenses:
-            flags = json.loads(e["flags"] or "[]")
+            try:
+                flags = json.loads(e["flags"]) if e["flags"] else []
+                if not isinstance(flags, list):
+                    flags = [str(flags)]
+            except Exception:
+                flags = [f.strip() for f in (e["flags"] or "").split(",") if f.strip()]
             w.writerow([
                 e["id"], e["status"], e["risk_score"], len(flags),
                 " | ".join(flags), e["explanation"] or ""

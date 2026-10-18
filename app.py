@@ -14,6 +14,7 @@ import seed_data
 import historical_ingestion
 import bulk_drive_ingestion
 import budget_engine
+import unstructured_excel_engine
 
 APP_DIR = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get("RECEIPT_GRAVEYARD_DATA_DIR", APP_DIR))
@@ -1933,6 +1934,11 @@ def dashboard():
                 "budget_alerts": [a for a in all_allocations if float(a["remaining_balance"] or 0) <= 0 or float(a["remaining_balance"] or 0) < 500]
             }
 
+        # Query all distinct active employees who have submitted expenses
+        active_employees = [r["employee"] for r in con.execute(
+            "SELECT DISTINCT employee FROM expenses WHERE employee IS NOT NULL AND employee != '' ORDER BY employee"
+        ).fetchall()]
+
     return render_template(
         "dashboard.html",
         expenses=rows,
@@ -1942,7 +1948,9 @@ def dashboard():
         view_all=view_all,
         user_allocations=user_allocations,
         all_allocations=all_allocations,
-        budget_summary=budget_summary
+        budget_summary=budget_summary,
+        selected_employee=filter_emp,
+        active_employees=active_employees
     )
 
 CITY_CURRENCY_MAP = {
@@ -3209,6 +3217,152 @@ def bulk_action():
             flash("Database reset. You can now test from a completely clean slate or re-seed anytime.", "info")
     return redirect(url_for("dashboard"))
 
+def compute_analytics_graph_data(con, period="monthly", scope="company", project_code=None, employee=None):
+    """
+    Computes monthly or yearly financial aggregation across company, project, or specific employee.
+    Calculates gross claimed, net approved, policy savings, claim counts, and category breakdowns.
+    """
+    where = ["status != 'Duplicate'"]
+    params = []
+    if scope == "project" and project_code:
+        where.append("upper(project_code) = upper(?)")
+        params.append(project_code)
+    elif scope == "person" and employee:
+        where.append("lower(employee) = lower(?)")
+        params.append(employee)
+
+    where_sql = "WHERE " + " AND ".join(where)
+    rows = con.execute(f"SELECT * FROM expenses {where_sql} ORDER BY expense_date ASC", params).fetchall()
+
+    periods_map = {}
+    categories_map = {}
+    status_map = {}
+
+    total_claimed = 0.0
+    total_approved = 0.0
+    total_savings = 0.0
+    total_claims = len(rows)
+    compliant_claims = 0
+
+    month_names = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+    for r in rows:
+        d_str = r["expense_date"] or ""
+        if period == "yearly":
+            pkey = d_str[:4] if len(d_str) >= 4 else "Unknown"
+            plabel = f"FY {pkey}" if pkey != "Unknown" else "Unknown"
+        else:
+            if len(d_str) >= 7:
+                y, m = d_str[:4], d_str[5:7]
+                try:
+                    m_idx = int(m)
+                    plabel = f"{month_names[m_idx]} {y}"
+                except Exception:
+                    plabel = f"{y}-{m}"
+                pkey = f"{y}-{m}"
+            else:
+                pkey = "Unknown"
+                plabel = "Unknown"
+
+        if pkey not in periods_map:
+            periods_map[pkey] = {
+                "label": plabel,
+                "claimed": 0.0,
+                "approved": 0.0,
+                "savings": 0.0,
+                "count": 0,
+                "categories": {}
+            }
+
+        c = float(r["amount_inr"] or 0)
+        a = float(r["reimbursable"] or 0)
+        s = max(0.0, c - a)
+
+        periods_map[pkey]["claimed"] += c
+        periods_map[pkey]["approved"] += a
+        periods_map[pkey]["savings"] += s
+        periods_map[pkey]["count"] += 1
+
+        cat = r["category"] or "Other"
+        periods_map[pkey]["categories"][cat] = periods_map[pkey]["categories"].get(cat, 0.0) + c
+        categories_map[cat] = categories_map.get(cat, 0.0) + c
+
+        stat = r["status"] or "Submitted"
+        status_map[stat] = status_map.get(stat, 0) + 1
+
+        if stat in ("Approved", "AUTO_APPROVED"):
+            compliant_claims += 1
+
+        total_claimed += c
+        total_approved += a
+        total_savings += s
+
+    sorted_pkeys = sorted(k for k in periods_map.keys() if k != "Unknown")
+    if "Unknown" in periods_map:
+        sorted_pkeys.append("Unknown")
+
+    labels = [periods_map[k]["label"] for k in sorted_pkeys]
+    claimed_series = [round(periods_map[k]["claimed"], 2) for k in sorted_pkeys]
+    approved_series = [round(periods_map[k]["approved"], 2) for k in sorted_pkeys]
+    savings_series = [round(periods_map[k]["savings"], 2) for k in sorted_pkeys]
+    count_series = [periods_map[k]["count"] for k in sorted_pkeys]
+
+    table_rows = []
+    for k in sorted_pkeys:
+        item = periods_map[k]
+        top_cat = "None"
+        if item["categories"]:
+            top_cat = max(item["categories"].items(), key=lambda x: x[1])[0]
+        table_rows.append({
+            "period": item["label"],
+            "raw_period": k,
+            "claimed": round(item["claimed"], 2),
+            "approved": round(item["approved"], 2),
+            "savings": round(item["savings"], 2),
+            "count": item["count"],
+            "top_category": top_cat,
+            "compliance_pct": round((item["approved"] / item["claimed"] * 100), 1) if item["claimed"] > 0 else 100.0
+        })
+
+    avg_claim = round(total_claimed / total_claims, 2) if total_claims > 0 else 0.0
+    compliance_rate = round((compliant_claims / total_claims * 100), 1) if total_claims > 0 else 100.0
+
+    return {
+        "period": period,
+        "scope": scope,
+        "labels": labels,
+        "claimed_series": claimed_series,
+        "approved_series": approved_series,
+        "savings_series": savings_series,
+        "count_series": count_series,
+        "categories": {k: round(v, 2) for k, v in sorted(categories_map.items(), key=lambda x: -x[1])},
+        "status_distribution": status_map,
+        "summary": {
+            "total_claimed": round(total_claimed, 2),
+            "total_approved": round(total_approved, 2),
+            "total_savings": round(total_savings, 2),
+            "total_claims": total_claims,
+            "avg_claim": avg_claim,
+            "compliance_rate": compliance_rate
+        },
+        "table_rows": table_rows
+    }
+
+@app.route("/api/analytics/graph-data")
+@login_required
+@role_required(["admin", "accounts"])
+def api_analytics_graph_data():
+    period = request.args.get("period", "monthly")
+    scope = request.args.get("scope", "company")
+    project_code = request.args.get("project_code")
+    employee = request.args.get("employee")
+
+    with connect() as con:
+        data = compute_analytics_graph_data(
+            con, period=period, scope=scope, project_code=project_code, employee=employee
+        )
+    return jsonify(data)
+
 @app.route("/analytics")
 @login_required
 @role_required(["admin", "accounts"])
@@ -3234,13 +3388,31 @@ def analytics():
             for t in types:
                 violations_map[t] = violations_map.get(t, 0) + 1
 
+        # Query projects and employees for interactive graph controls
+        all_projects = [r["code"] for r in con.execute(
+            "SELECT DISTINCT code FROM projects WHERE code IS NOT NULL AND status='Active' ORDER BY code"
+        ).fetchall()]
+        if not all_projects:
+            all_projects = [r["project_code"] for r in con.execute(
+                "SELECT DISTINCT project_code FROM expenses WHERE project_code IS NOT NULL AND project_code != '' ORDER BY project_code"
+            ).fetchall()]
+
+        all_employees = [r["employee"] for r in con.execute(
+            "SELECT DISTINCT employee FROM expenses WHERE employee IS NOT NULL AND employee != '' ORDER BY employee"
+        ).fetchall()]
+
+        initial_graph_data = compute_analytics_graph_data(con, period="monthly", scope="company")
+
     return render_template(
         "analytics.html",
         expenses=rows,
         trips=trips,
         emp_stats=emp_stats,
         violations_map=violations_map,
-        policy=POLICY
+        policy=POLICY,
+        all_projects=all_projects,
+        all_employees=all_employees,
+        initial_graph_data=initial_graph_data
     )
 
 @app.route("/policy")
@@ -3296,7 +3468,52 @@ def export_json():
     with connect() as con:
         rows = con.execute("SELECT * FROM expenses ORDER BY id").fetchall()
         result = [dict(r) for r in rows]
-    return jsonify(result)
+# ----------------- ROUTES: UNSTRUCTURED EXCEL INGESTION & AUTO-PROVISIONING -----------------
+
+@app.route("/accounts/upload-ledger", methods=["GET"], endpoint="accounts_excel_import")
+@login_required
+@role_required(["admin", "accounts"])
+def accounts_excel_import():
+    """Renders the unstructured Excel ledger ingestion interface."""
+    return render_template("accounts_excel_import.html", report=None)
+
+@app.route("/accounts/upload-ledger/process", methods=["POST"], endpoint="process_unstructured_excel")
+@login_required
+@role_required(["admin", "accounts"])
+def process_unstructured_excel():
+    """
+    Ingests an unstructured Excel ledger (.xlsx, .xls, .csv).
+    1. Identifies messy columns and arranges records per portal requirements.
+    2. Provisions new user login credentials for employees who don't exist in the system.
+    3. Normalizes expenses and checks project budget caps.
+    """
+    file = request.files.get("ledger_file")
+    if not file or not file.filename:
+        flash("Please upload an Excel (.xlsx, .xls) or CSV file.", "error")
+        return redirect(url_for("accounts_excel_import"))
+
+    filename = secure_filename(file.filename)
+    file_bytes = file.read()
+
+    with connect() as con:
+        report = unstructured_excel_engine.process_unstructured_ledger(
+            con=con,
+            file_bytes=file_bytes,
+            filename=filename,
+            current_user_id=session.get("user_id", 1),
+            analyze_func=analyze_expense
+        )
+
+    if not report.get("success"):
+        flash(f"Failed to process ledger: {report.get('error', 'Unknown parsing error')}", "error")
+        return redirect(url_for("accounts_excel_import"))
+
+    flash(
+        f"Successfully arranged {report['total_rows_processed']} expense records from '{filename}'! "
+        f"Provisioned {len(report['new_users_created'])} new employee logins.",
+        "success"
+    )
+    return render_template("accounts_excel_import.html", report=report)
 
 @app.route("/uploads/<path:filename>")
 def uploaded_file(filename):

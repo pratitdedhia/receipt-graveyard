@@ -57,6 +57,7 @@
         
         {% if current_user.role in ('admin', 'accounts') %}
           <a href="{{ url_for('admin_allocations') }}" class="{% if request.endpoint == 'admin_allocations' %}active{% endif %}">Budget Caps</a>
+          <a href="{{ url_for('accounts_excel_import') }}" class="{% if request.endpoint in ('accounts_excel_import', 'process_unstructured_excel') %}active{% endif %}">Upload Excel</a>
           <a href="{{ url_for('import_bulk') }}" class="{% if request.endpoint in ('import_bulk', 'bulk_receipt_import', 'import_bulk_map', 'import_bulk_results') %}active{% endif %}">Bulk Drive Import</a>
         {% endif %}
         

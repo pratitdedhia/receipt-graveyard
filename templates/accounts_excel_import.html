@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% block title %}Smart Unstructured Excel Ingestion · Receipt Graveyard{% endblock %}
+
+{% block content %}
+<section class="hero-section">
+  <div class="hero-content">
+    <div class="eyebrow-chip">ACCOUNTS COMMAND · UNSTRUCTURED LEDGER INGESTION</div>
+    <h1 class="hero-title">Smart Excel Ledger Ingestor.<br><span>Auto-Arrangement & Staff Login Provisioning.</span></h1>
+    <p class="hero-desc">
+      Upload any unstructured or legacy expense spreadsheet. The AI engine automatically identifies messy columns, provisions login credentials for new employees, and standardizes records against company policies and project budget caps.
+    </p>
+  </div>
+  <div class="hero-actions">
+    <a class="btn btn-secondary" href="{{ url_for('dashboard') }}">
+      ← Back to Command Center
+    </a>
+    <a class="btn btn-secondary" href="{{ url_for('import_bulk') }}">
+      Bulk Drive Import
+    </a>
+  </div>
+</section>
+
+{% if report %}
+<!-- INGESTION SUMMARY REPORT -->
+<section style="margin-bottom: 24px;">
+  <div class="finance-banner finance-banner-4col" style="background: linear-gradient(135deg, #064e3b 0%, #022c22 100%); border-color: #059669;">
+    <div class="finance-col">
+      <span class="banner-eyebrow" style="color: #6ee7b7;">TOTAL EXPENSES ARRANGED</span>
+      <div class="banner-amount font-mono" style="color: #ffffff;">{{ report.total_rows_processed }}</div>
+      <span class="banner-hint" style="color: #a7f3d0;">Records normalized & audited</span>
+    </div>
+    <div class="finance-divider"></div>
+    <div class="finance-col">
+      <span class="banner-eyebrow" style="color: #fde047;">TOTAL GROSS VALUE</span>
+      <div class="banner-amount font-mono" style="color: #fde047;">₹{{ "{:,.2f}".format(report.total_amount_inr) }}</div>
+      <span class="banner-hint" style="color: #fef08a;">Ingested from {{ report.filename }}</span>
+    </div>
+    <div class="finance-divider"></div>
+    <div class="finance-col">
+      <span class="banner-eyebrow" style="color: #93c5fd;">NEW LOGINS PROVISIONED</span>
+      <div class="banner-amount font-mono" style="color: #60a5fa;">{{ report.new_users_created|length }}</div>
+      <span class="banner-hint" style="color: #bfdbfe;">Accounts auto-created</span>
+    </div>
+    <div class="finance-divider"></div>
+    <div class="finance-col">
+      <span class="banner-eyebrow" style="color: #a7f3d0;">ACTIVE STAFF MAPPED</span>
+      <div class="banner-amount font-mono" style="color: #34d399;">{{ report.existing_users_count }}</div>
+      <span class="banner-hint" style="color: #d1fae5;">Existing user profiles linked</span>
+    </div>
+  </div>
+</section>
+
+{% if report.new_users_created and report.new_users_created|length > 0 %}
+<!-- NEWLY PROVISIONED ACCOUNTS TABLE -->
+<div class="card" style="margin-bottom: 24px; border: 1.5px solid #059669; background: #f0fdf4; box-shadow: 0 4px 14px rgba(5, 150, 105, 0.08);">
+  <div style="padding: 18px 22px; border-bottom: 1px solid #bbf7d0; display: flex; justify-content: space-between; align-items: center;">
+    <div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 18px;">✨</span>
+        <strong style="font-size: 16px; color: #065f46;">Auto-Created Employee Logins ({{ report.new_users_created|length }})</strong>
+      </div>
+      <p style="font-size: 12.5px; color: #166534; margin-top: 4px;">
+        These employees were not in the system. The platform automatically provisioned their accounts and assigned an initial ₹25,000 project budget cap.
+      </p>
+    </div>
+    <span class="badge badge-success" style="padding: 6px 12px; font-weight: 700; font-size: 12px;">LOGIN READY</span>
+  </div>
+  <div style="overflow-x: auto;">
+    <table class="data-table" style="background: transparent;">
+      <thead>
+        <tr style="background: #e2fbe8;">
+          <th>EMPLOYEE NAME</th>
+          <th>LOGIN EMAIL</th>
+          <th>DEFAULT PASSWORD</th>
+          <th>ASSIGNED ROLE</th>
+          <th>DEPARTMENT</th>
+          <th>INITIAL SPENDING CAP</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in report.new_users_created %}
+        <tr>
+          <td><strong>{{ u.name }}</strong></td>
+          <td><code style="background: #ffffff; padding: 2px 6px; border-radius: 4px; border: 1px solid #86efac; color: #065f46;">{{ u.email }}</code></td>
+          <td><code style="background: #ffffff; padding: 2px 6px; border-radius: 4px; border: 1px solid #86efac; color: #15803d; font-weight: 700;">{{ u.password }}</code></td>
+          <td><span class="badge badge-info">{{ u.role|upper }}</span></td>
+          <td>{{ u.department }}</td>
+          <td class="font-mono" style="font-weight: 700; color: #047857;">₹25,000.00</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- ARRANGE RECORDS PREVIEW -->
+<div class="card" style="margin-bottom: 24px;">
+  <div style="padding: 16px 22px; border-bottom: 1px solid var(--border-card); display: flex; justify-content: space-between; align-items: center;">
+    <div>
+      <strong style="font-size: 15px; color: var(--ink-900);">Normalized & Arranged Claims ({{ report.arranged_expenses|length }})</strong>
+      <p style="font-size: 12px; color: var(--ink-muted); margin-top: 2px;">
+        All fields mapped to portal requirements: Employee, Date, Merchant, Category, Project, Amounts and Status.
+      </p>
+    </div>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-sm btn-primary">Open in Command Center →</a>
+  </div>
+  <div style="overflow-x: auto; max-height: 480px;">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>CLAIM ID</th>
+          <th>EMPLOYEE</th>
+          <th>EXPENSE DATE</th>
+          <th>MERCHANT</th>
+          <th>CATEGORY</th>
+          <th>PROJECT</th>
+          <th style="text-align: right;">CLAIMED (INR)</th>
+          <th style="text-align: right;">APPROVED ELIGIBLE</th>
+          <th>AUDIT STATUS</th>
+          <th>ACTION</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in report.arranged_expenses %}
+        <tr>
+          <td class="font-mono">#{{ item.id }}</td>
+          <td><strong>{{ item.employee }}</strong></td>
+          <td>{{ item.date }}</td>
+          <td>{{ item.merchant }}</td>
+          <td><span class="badge badge-outline">{{ item.category }}</span></td>
+          <td><span class="badge badge-secondary font-mono">{{ item.project_code }}</span></td>
+          <td style="text-align: right;" class="font-mono font-bold">₹{{ "{:,.2f}".format(item.amount) }}</td>
+          <td style="text-align: right;" class="font-mono color-green font-bold">₹{{ "{:,.2f}".format(item.eligible) }}</td>
+          <td>
+            {% if item.status == 'Approved' %}
+              <span class="badge badge-success">Approved</span>
+            {% else %}
+              <span class="badge badge-warning">Needs Review</span>
+            {% endif %}
+          </td>
+          <td>
+            <a href="{{ url_for('expense_detail', expense_id=item.id) }}" class="btn btn-xs btn-outline" target="_blank">View Claim ↗</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- UPLOAD BOX -->
+<div class="card" style="max-width: 850px; margin: 0 auto;">
+  <div style="padding: 24px;">
+    <div style="text-align: center; margin-bottom: 24px;">
+      <div style="width: 56px; height: 56px; margin: 0 auto 12px; background: #e6f4ea; border-radius: 14px; display: grid; place-items: center; color: #166534; font-size: 26px;">
+        📊
+      </div>
+      <h2 style="font-size: 22px; font-weight: 800; color: var(--ink-900); margin-bottom: 6px;">Upload Unstructured Excel / CSV Ledger</h2>
+      <p style="font-size: 13.5px; color: var(--ink-muted); max-width: 580px; margin: 0 auto;">
+        Drop your monthly expenditure sheet. Columns can be in any order, with arbitrary headers, messy dates, and currency values. The system resolves identities and structures everything.
+      </p>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" action="{{ url_for('process_unstructured_excel') }}">
+      <div class="drop-zone" id="drop-zone" style="border: 2px dashed #059669; border-radius: 12px; padding: 40px 20px; text-align: center; background: #fbfdfc; cursor: pointer; transition: all 0.2s ease;">
+        <input type="file" name="ledger_file" id="ledger_file" accept=".xlsx,.xls,.csv" required style="display: none;">
+        <div style="font-size: 38px; margin-bottom: 12px;">📁</div>
+        <div style="font-size: 15px; font-weight: 700; color: #065f46; margin-bottom: 4px;" id="file-label-text">
+          Click to browse or drag & drop Excel workbook here
+        </div>
+        <div style="font-size: 12px; color: var(--ink-muted);">
+          Supported formats: <strong>.xlsx</strong>, <strong>.xls</strong>, <strong>.csv</strong> (Up to 30 MB)
+        </div>
+        <div id="selected-file-name" style="margin-top: 14px; font-weight: 700; color: #059669; font-size: 14px; display: none;"></div>
+      </div>
+
+      <div style="margin-top: 24px; display: flex; justify-content: space-between; align-items: center;">
+        <div style="font-size: 12px; color: #64748b;">
+          🛡️ Automatic policy cap auditing & double-entry project ledger updates enabled.
+        </div>
+        <button type="submit" class="btn btn-primary" id="submit-btn" style="padding: 10px 24px; font-weight: 700;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 16 12 12 8 16"></polyline><line x1="12" y1="12" x2="12" y2="21"></line><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path><polyline points="16 16 12 12 8 16"></polyline></svg>
+          Ingest & Arrange Ledger
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <div style="background: #f8faf9; border-top: 1px solid var(--border-card); padding: 16px 24px; border-bottom-left-radius: var(--radius-lg); border-bottom-right-radius: var(--radius-lg); font-size: 12px; color: #475569;">
+    <strong>Supported Flexible Column Names:</strong>
+    <ul style="margin: 6px 0 0 18px; line-height: 1.6;">
+      <li><strong>Employee:</strong> <code>Employee Name</code>, <code>Staff</code>, <code>Team Member</code>, <code>Claimant</code>, <code>Spender</code>, <code>Name</code></li>
+      <li><strong>Expense Date:</strong> <code>Date</code>, <code>Txn Date</code>, <code>Bill Date</code>, <code>Spend Date</code>, <code>When</code></li>
+      <li><strong>Merchant:</strong> <code>Merchant</code>, <code>Vendor</code>, <code>Store</code>, <code>Payee</code>, <code>Place</code>, <code>Restaurant</code></li>
+      <li><strong>Amount:</strong> <code>Amount</code>, <code>Claimed Amount</code>, <code>Cost</code>, <code>Price</code>, <code>Total</code>, <code>INR</code></li>
+      <li><strong>Category:</strong> <code>Category</code>, <code>Expense Type</code>, <code>Type</code>, <code>Head</code>, <code>Department</code></li>
+      <li><strong>Project:</strong> <code>Project Code</code>, <code>Project</code>, <code>Client</code>, <code>Cost Center</code>, <code>PRJ</code></li>
+    </ul>
+  </div>
+</div>
+
+<script>
+  const dropZone = document.getElementById('drop-zone');
+  const fileInput = document.getElementById('ledger_file');
+  const nameLabel = document.getElementById('selected-file-name');
+  const textLabel = document.getElementById('file-label-text');
+
+  dropZone.addEventListener('click', () => fileInput.click());
+
+  fileInput.addEventListener('change', (e) => {
+    if (fileInput.files.length > 0) {
+      const file = fileInput.files[0];
+      nameLabel.textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+      nameLabel.style.display = 'block';
+      textLabel.textContent = 'File attached! Ready to process.';
+      dropZone.style.borderColor = '#10b981';
+      dropZone.style.background = '#f0fdf4';
+    }
+  });
+
+  dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.style.borderColor = '#10b981';
+    dropZone.style.background = '#ecfdf5';
+  });
+
+  dropZone.addEventListener('dragleave', () => {
+    dropZone.style.borderColor = '#059669';
+    dropZone.style.background = '#fbfdfc';
+  });
+
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    if (e.dataTransfer.files.length > 0) {
+      fileInput.files = e.dataTransfer.files;
+      const file = e.dataTransfer.files[0];
+      nameLabel.textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+      nameLabel.style.display = 'block';
+      textLabel.textContent = 'File attached! Ready to process.';
+      dropZone.style.borderColor = '#10b981';
+      dropZone.style.background = '#f0fdf4';
+    }
+  });
+</script>
+{% endblock %}

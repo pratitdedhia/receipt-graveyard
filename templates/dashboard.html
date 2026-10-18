@@ -296,13 +296,17 @@
     </p>
   </div>
   <div class="hero-actions">
-    <a class="btn btn-primary" href="{{ url_for('submit') }}">
+    <a class="btn btn-primary" href="{{ url_for('accounts_excel_import') }}" style="background: #10b981; color: #042f2e; font-weight: 700; border-color: #059669;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+      Upload Excel Ledger
+    </a>
+    <a class="btn btn-secondary" href="{{ url_for('submit') }}">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
       Audit New Receipt
     </a>
     <a class="btn btn-secondary" href="{{ url_for('analytics') }}">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
-      Month-in-Review & Trips
+      Month-in-Review
     </a>
   </div>
 </section>
@@ -369,7 +373,7 @@
 
 <!-- Corporate Project Budget Ledger Summary -->
 {% if budget_summary %}
-<section class="finance-banner" style="background: linear-gradient(135deg, #042f2e 0%, #0f172a 100%); border-color: #0f766e; margin-top: 15px;">
+<section class="finance-banner finance-banner-4col" style="background: linear-gradient(135deg, #042f2e 0%, #0f172a 100%); border-color: #0f766e; margin-top: 15px;">
   <div class="finance-col">
     <span class="banner-eyebrow" style="color: #5eead4;">TOTAL PROJECT ALLOCATIONS</span>
     <div class="banner-amount font-mono" style="color: #ffffff;">₹{{ "{:,.2f}".format(budget_summary.total_allocated) }}</div>
@@ -418,6 +422,12 @@
 <section class="demo-controls-bar">
   <div class="controls-left">
     <span class="controls-title">⚡ Finance Controls:</span>
+    <a href="{{ url_for('analytics') }}" class="btn btn-sm btn-primary" style="font-weight: 700; background: linear-gradient(135deg, #0d9488 0%, #059669 100%);">
+      📈 Spend Analysis & Graphs
+    </a>
+    <a href="{{ url_for('accounts_excel_import') }}" class="btn btn-sm btn-outline-green" style="font-weight: 700;">
+      📊 Import Unstructured Excel
+    </a>
     <form method="post" action="{{ url_for('bulk_action') }}" style="display:inline;">
       <input type="hidden" name="action" value="seed_dataset">
       <button type="submit" class="btn btn-sm btn-accent" title="Loads full 1-month realistic dataset (24 receipts across all edge cases)">
@@ -465,6 +475,27 @@
       <input id="searchBox" type="search" placeholder="Search employee, merchant, city, category, flag…">
     </div>
 
+    {% if current_user.role in ('accounts', 'admin') and active_employees %}
+    <div class="person-filter-wrap" style="display: flex; align-items: center; gap: 8px; background: rgba(15, 23, 42, 0.7); padding: 4px 10px; border-radius: 8px; border: 1px solid var(--border);">
+      <label for="personFilter" style="font-size: 0.8rem; font-weight: 700; color: #5eead4; white-space: nowrap; display: flex; align-items: center; gap: 5px;">
+        👤 Person:
+      </label>
+      <select id="personFilter" class="form-input" style="padding: 4px 8px; height: 32px; font-size: 0.82rem; background: #0f172a; color: #f1f5f9; border: 1px solid var(--border); border-radius: 6px; min-width: 170px;" onchange="applyPersonFilter(this.value)">
+        <option value="">All Personnel ({{ active_employees|length }} staff)</option>
+        {% for emp in active_employees %}
+          <option value="{{ emp }}" {% if selected_employee and selected_employee|lower == emp|lower %}selected{% endif %}>
+            {{ emp }}
+          </option>
+        {% endfor %}
+      </select>
+      {% if selected_employee %}
+        <a href="{{ url_for('dashboard') }}" class="btn btn-sm btn-ghost-danger" style="padding: 2px 8px; font-size: 0.75rem; text-decoration: none;" title="Reset filter to all personnel">
+          ✕ Clear
+        </a>
+      {% endif %}
+    </div>
+    {% endif %}
+
     <div class="filter-pills" id="statusFilterPills">
       <button class="pill active" data-status="">All</button>
       <button class="pill" data-status="PENDING_ACCOUNTS,Needs Review">Accounts Queue ({{ stats.pending_accounts_count }})</button>
@@ -505,6 +536,7 @@
         data-budget="{{ e.budget_status or '' }}"
         data-risk="{{ e.risk_score }}"
         data-trip="{{ e.is_trip }}"
+        data-employee="{{ e.employee|lower }}"
         data-search="{{ (e.employee ~ ' ' ~ e.merchant ~ ' ' ~ e.category ~ ' ' ~ (e.project_code or '') ~ ' ' ~ e.city ~ ' ' ~ e.status ~ ' ' ~ (e.approval_status or '') ~ ' ' ~ (e.flags or ''))|lower }}"
       >
         <td>
@@ -661,12 +693,14 @@
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const searchBox = document.getElementById('searchBox');
+  const personFilter = document.getElementById('personFilter');
   const pills = document.querySelectorAll('#statusFilterPills .pill');
   const rows = document.querySelectorAll('#expenseTable tbody tr');
   const countBadge = document.getElementById('visibleCount');
 
   let activeStatus = '';
   let activeRisk = '';
+  let activePerson = personFilter ? personFilter.value.trim().toLowerCase() : '';
 
   function filterTable() {
     const query = searchBox.value.trim().toLowerCase();
@@ -675,9 +709,12 @@ document.addEventListener('DOMContentLoaded', () => {
     rows.forEach(row => {
       const rowSearch = row.dataset.search || '';
       const rowStatus = row.dataset.status || '';
+      const rowEmployee = (row.dataset.employee || '').toLowerCase();
       const rowRisk = parseInt(row.dataset.risk || '0', 10);
 
       const matchesSearch = !query || rowSearch.includes(query);
+      const matchesPerson = !activePerson || (rowEmployee === activePerson);
+
       let matchesStatus = true;
       if (activeStatus) {
         const allowed = activeStatus.split(',').map(s => s.trim().toLowerCase());
@@ -687,7 +724,7 @@ document.addEventListener('DOMContentLoaded', () => {
         matchesStatus = matchesStatus && (rowRisk >= 50);
       }
 
-      if (matchesSearch && matchesStatus) {
+      if (matchesSearch && matchesStatus && matchesPerson) {
         row.style.display = '';
         visible++;
       } else {
@@ -697,6 +734,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (countBadge) countBadge.textContent = visible;
   }
+
+  window.applyPersonFilter = function(emp) {
+    activePerson = emp.trim().toLowerCase();
+    filterTable();
+
+    // Update browser URL query parameter seamlessly
+    const url = new URL(window.location.href);
+    if (emp && emp.trim()) {
+      url.searchParams.set('employee', emp.trim());
+    } else {
+      url.searchParams.delete('employee');
+    }
+    window.history.replaceState({}, '', url);
+  };
 
   searchBox.addEventListener('input', filterTable);
 
@@ -709,6 +760,11 @@ document.addEventListener('DOMContentLoaded', () => {
       filterTable();
     });
   });
+
+  // Run initial table filter if employee was preselected
+  if (activePerson) {
+    filterTable();
+  }
 });
 </script>
 {% endblock %}

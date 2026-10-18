@@ -221,20 +221,11 @@
         </label>
       </div>
 
-      <!-- Step 2: If yes, was it for some project? -->
-      <div id="projectQuestionBlock" style="display: none; margin-top: 14px; padding-left: 32px; border-left: 2px solid var(--accent);">
-        <label class="custom-checkbox-label">
-          <input type="checkbox" name="is_project" id="isProjectCheckbox" value="1" checked onchange="handleProjectChange()">
-          <span class="checkmark"></span>
-          <div class="checkbox-text">
-            <strong>💼 Was this trip for an enterprise project / client code?</strong>
-            <small>If unchecked, this expense is allocated to General Travel Overhead.</small>
-          </div>
-        </label>
-      </div>
+      <!-- Hidden is_project flag to preserve system audit compatibility -->
+      <input type="hidden" name="is_project" id="isProjectCheckbox" value="1">
 
-      <!-- Step 3: If yes, ask project number / code -->
-      <div id="projectSelectBlock" style="margin-top: 14px; padding-left: 32px; border-left: 2px solid var(--emerald);">
+      <!-- Step 2: Show project dropdown only if checkbox is ticked YES -->
+      <div id="projectSelectBlock" style="display: none; margin-top: 14px; padding-left: 32px; border-left: 2px solid var(--emerald); transition: all 0.25s ease;">
         <div class="form-group" style="margin-bottom: 0;">
           <label>Enterprise Project Number / Code *</label>
           <select name="project_code" id="fieldProjectCode" class="form-input font-mono" onchange="updateProjectCapHint()">
@@ -936,25 +927,16 @@ function updateEmployeeOfficeHint() {
 }
 
 function handleTripChange() {
-  const isTrip = document.getElementById('isTripCheckbox').checked;
-  const projQuestion = document.getElementById('projectQuestionBlock');
-  if (projQuestion) {
-    projQuestion.style.display = isTrip ? 'block' : 'none';
+  const isTripEl = document.getElementById('isTripCheckbox');
+  const isTrip = isTripEl ? isTripEl.checked : false;
+  const projSelectBlock = document.getElementById('projectSelectBlock');
+  if (projSelectBlock) {
+    projSelectBlock.style.display = isTrip ? 'block' : 'none';
   }
-  handleProjectChange();
 }
 
 function handleProjectChange() {
-  const isTrip = document.getElementById('isTripCheckbox').checked;
-  const isProject = document.getElementById('isProjectCheckbox').checked;
-  const projSelectBlock = document.getElementById('projectSelectBlock');
-  if (projSelectBlock) {
-    if (isTrip && !isProject) {
-      projSelectBlock.style.display = 'none';
-    } else {
-      projSelectBlock.style.display = 'block';
-    }
-  }
+  handleTripChange();
 }
 
 const CITY_CURRENCY_MAP = {

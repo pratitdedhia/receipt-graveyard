@@ -1,16 +1,240 @@
 {% extends "base.html" %}
-{% block title %}Month-in-Review & Emerging Patterns · Receipt Graveyard{% endblock %}
+{% block title %}Interactive Spend Analytics & Visual Graphs · Receipt Graveyard{% endblock %}
+
+{% block extra_head %}
+<!-- Chart.js local library -->
+<script src="{{ url_for('static', filename='chart.umd.min.js') }}"></script>
+{% endblock %}
 
 {% block content %}
-<div class="analytics-head">
-  <div class="eyebrow-chip">TEMPORAL AUDIT & PATTERN RECOGNITION · OCTOBER 2026</div>
-  <h1 class="page-title">Month-in-Review: <span>Emerging Patterns.</span></h1>
+<div class="analytics-head" style="margin-bottom: 24px;">
+  <div class="eyebrow-chip">SPEND INTELLIGENCE & TEMPORAL AUDIT · OCTOBER 2026</div>
+  <h1 class="page-title">Financial Analytics: <span>Spend Trends & Patterns.</span></h1>
   <p class="page-intro">
-    As receipts accumulate across the month, patterns emerge: multi-day business trips, running city per-diem cap overruns, smurfing split transactions, and cross-employee collusion.
+    Multi-dimensional financial analysis across months and fiscal years. Evaluate expenditure velocity, category distribution, and policy savings across the entire company, by specific enterprise project, or by individual employee.
   </p>
 </div>
 
-<!-- Reconstructed Trips Section -->
+<!-- ============================================================
+     1. INTERACTIVE SPEND ANALYSIS & VISUAL GRAPHS SECTION
+     ============================================================ -->
+<section class="analytics-graph-section">
+  <!-- Controls Panel -->
+  <div class="graph-controls-panel">
+    <div class="controls-cluster">
+      <span class="control-label-title">📊 Granularity:</span>
+      <div class="segmented-toggle" id="periodToggleGroup">
+        <button type="button" class="segmented-btn active" data-period="monthly" onclick="switchPeriod('monthly')">
+          📅 Monthly Analysis
+        </button>
+        <button type="button" class="segmented-btn" data-period="yearly" onclick="switchPeriod('yearly')">
+          🗓️ Yearly Analysis
+        </button>
+      </div>
+
+      <span class="control-label-title" style="margin-left: 10px;">🎯 Scope:</span>
+      <div class="segmented-toggle" id="scopeToggleGroup">
+        <button type="button" class="segmented-btn active" data-scope="company" onclick="switchScope('company')">
+          🏢 Company-Wide
+        </button>
+        <button type="button" class="segmented-btn" data-scope="project" onclick="switchScope('project')">
+          💼 By Project
+        </button>
+        <button type="button" class="segmented-btn" data-scope="person" onclick="switchScope('person')">
+          👤 By Person
+        </button>
+      </div>
+
+      <!-- Project Dropdown (Revealed when scope == 'project') -->
+      <div id="projectSelectWrap" style="display: none;">
+        <select id="projectSelect" class="graph-filter-select" onchange="handleEntityChange()">
+          {% for prj in all_projects %}
+            <option value="{{ prj }}">{{ prj }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Person Dropdown (Revealed when scope == 'person') -->
+      <div id="personSelectWrap" style="display: none;">
+        <select id="personSelect" class="graph-filter-select" onchange="handleEntityChange()">
+          {% for emp in all_employees %}
+            <option value="{{ emp }}">{{ emp }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <!-- Active Filter Badge & Status -->
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <span id="loadingIndicator" style="display: none; font-size: 0.8rem; color: #0d9488; font-weight: 700;">
+        ⚡ Loading data...
+      </span>
+      <div class="active-view-chip" id="activeViewChip">
+        <span style="font-size: 10px;">●</span> Viewing: Company-Wide · Monthly Aggregate
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI Summary Cards -->
+  <div class="analytics-kpi-grid">
+    <div class="analytics-kpi-card">
+      <div class="kpi-card-header">
+        <span>Total Claimed</span>
+        <span>💵</span>
+      </div>
+      <div class="kpi-card-val font-mono" id="kpiClaimed">
+        ₹{{ "{:,.2f}".format(initial_graph_data.summary.total_claimed) }}
+      </div>
+      <div class="kpi-card-sub">Gross staff submissions</div>
+    </div>
+
+    <div class="analytics-kpi-card" style="border-left: 3px solid #10b981;">
+      <div class="kpi-card-header">
+        <span>Approved Reimbursement</span>
+        <span>✅</span>
+      </div>
+      <div class="kpi-card-val font-mono color-green" id="kpiApproved">
+        ₹{{ "{:,.2f}".format(initial_graph_data.summary.total_approved) }}
+      </div>
+      <div class="kpi-card-sub">Net payout scheduled</div>
+    </div>
+
+    <div class="analytics-kpi-card" style="border-left: 3px solid #f59e0b;">
+      <div class="kpi-card-header">
+        <span>Policy Savings</span>
+        <span>🛡️</span>
+      </div>
+      <div class="kpi-card-val font-mono color-amber" id="kpiSavings">
+        ₹{{ "{:,.2f}".format(initial_graph_data.summary.total_savings) }}
+      </div>
+      <div class="kpi-card-sub">Capped & non-reimbursable</div>
+    </div>
+
+    <div class="analytics-kpi-card">
+      <div class="kpi-card-header">
+        <span>Total Claims</span>
+        <span>📑</span>
+      </div>
+      <div class="kpi-card-val font-mono" id="kpiClaims">
+        {{ initial_graph_data.summary.total_claims }}
+      </div>
+      <div class="kpi-card-sub">Audited expense records</div>
+    </div>
+
+    <div class="analytics-kpi-card">
+      <div class="kpi-card-header">
+        <span>Avg Claim Size</span>
+        <span>📊</span>
+      </div>
+      <div class="kpi-card-val font-mono" id="kpiAvgClaim">
+        ₹{{ "{:,.2f}".format(initial_graph_data.summary.avg_claim) }}
+      </div>
+      <div class="kpi-card-sub">Per transaction mean</div>
+    </div>
+
+    <div class="analytics-kpi-card" style="border-left: 3px solid #06b6d4;">
+      <div class="kpi-card-header">
+        <span>Compliance Rate</span>
+        <span>🎯</span>
+      </div>
+      <div class="kpi-card-val font-mono" style="color: #0284c7;" id="kpiCompliance">
+        {{ initial_graph_data.summary.compliance_rate }}%
+      </div>
+      <div class="kpi-card-sub">Claims passing policy</div>
+    </div>
+  </div>
+
+  <!-- Primary Trend Chart Box -->
+  <div class="chart-card-box" style="margin-bottom: 24px;">
+    <div class="chart-head-bar">
+      <div class="chart-title-main">
+        <span>📈 Expenditure & Reimbursement Velocity Trend</span>
+      </div>
+      <div style="font-size: 0.8rem; color: #64748b; font-family: var(--font-mono);">
+        Gross Claimed vs. Net Reimbursement vs. Deducted Savings
+      </div>
+    </div>
+    <div class="chart-canvas-container">
+      <canvas id="trendChartCanvas"></canvas>
+    </div>
+  </div>
+
+  <!-- Secondary Charts Row: Category Breakdown + Verdicts -->
+  <div class="charts-row-split">
+    <!-- Category Spend Distribution -->
+    <div class="chart-card-box">
+      <div class="chart-head-bar">
+        <div class="chart-title-main">
+          <span>🍩 Spend by Expense Category</span>
+        </div>
+        <span class="badge-count" style="font-size: 0.72rem;">Category Volume</span>
+      </div>
+      <div class="chart-canvas-container-doughnut">
+        <canvas id="categoryChartCanvas"></canvas>
+      </div>
+    </div>
+
+    <!-- Audit Decisions & Compliance Ratio -->
+    <div class="chart-card-box">
+      <div class="chart-head-bar">
+        <div class="chart-title-main">
+          <span>⚖️ Audit Decisions Breakdown</span>
+        </div>
+        <span class="badge-count" style="font-size: 0.72rem;">Verification Status</span>
+      </div>
+      <div class="chart-canvas-container-doughnut">
+        <canvas id="statusChartCanvas"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Periodic Ledger Breakdown Table -->
+  <div class="ledger-breakdown-card">
+    <div class="chart-head-bar">
+      <div class="chart-title-main">
+        <span>📋 Periodic Financial Breakdown Ledger</span>
+      </div>
+      <div class="block-tag" id="tablePeriodTag">Aggregated by {{ initial_graph_data.period|capitalize }}</div>
+    </div>
+    <div class="table-container" style="max-height: 380px; overflow-y: auto;">
+      <table class="data-table" id="periodicTable">
+        <thead>
+          <tr>
+            <th>TIME PERIOD</th>
+            <th>TOTAL CLAIMED (GROSS)</th>
+            <th>APPROVED REIMBURSEMENT (NET)</th>
+            <th>POLICY SAVINGS / DEDUCTIONS</th>
+            <th>TOTAL CLAIMS</th>
+            <th>PRIMARY SPEND CATEGORY</th>
+            <th>COMPLIANCE RATING</th>
+          </tr>
+        </thead>
+        <tbody id="periodicTableBody">
+          {% for r in initial_graph_data.table_rows %}
+          <tr>
+            <td><strong>{{ r.period }}</strong></td>
+            <td class="font-mono">₹{{ "{:,.2f}".format(r.claimed) }}</td>
+            <td class="font-mono color-green">₹{{ "{:,.2f}".format(r.approved) }}</td>
+            <td class="font-mono color-amber">₹{{ "{:,.2f}".format(r.savings) }}</td>
+            <td><span class="id-badge">{{ r.count }} claims</span></td>
+            <td><span class="trip-city-badge">{{ r.top_category }}</span></td>
+            <td>
+              <div class="compliance-track" style="width: 120px;">
+                <div class="compliance-fill {% if r.compliance_pct >= 80 %}fill-green{% elif r.compliance_pct >= 50 %}fill-amber{% else %}fill-red{% endif %}" style="width: {{ r.compliance_pct }}%;"></div>
+              </div>
+              <span class="font-mono" style="font-size: 0.75rem;">{{ r.compliance_pct }}% approved</span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     2. RECONSTRUCTED TRIPS SECTION
+     ============================================================ -->
 <section class="analytics-block">
   <div class="block-header-row">
     <div>
@@ -61,7 +285,9 @@
   </div>
 </section>
 
-<!-- Employee Spend & Compliance Leaderboard -->
+<!-- ============================================================
+     3. EMPLOYEE SPEND & COMPLIANCE LEADERBOARD
+     ============================================================ -->
 <section class="analytics-block">
   <div class="block-header-row">
     <div>
@@ -112,7 +338,9 @@
   </div>
 </section>
 
-<!-- Violation & Fraud Taxonomy Grid -->
+<!-- ============================================================
+     4. VIOLATION & FRAUD TAXONOMY GRID
+     ============================================================ -->
 <section class="analytics-block">
   <div class="block-header-row">
     <div>
@@ -136,4 +364,361 @@
     {% endif %}
   </div>
 </section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Initial server-rendered dataset
+let graphData = {{ initial_graph_data|tojson }};
+
+let currentPeriod = 'monthly';
+let currentScope = 'company';
+
+let trendChart = null;
+let categoryChart = null;
+let statusChart = null;
+
+// Initialize Chart.js instances on DOM Ready
+document.addEventListener('DOMContentLoaded', () => {
+  initCharts(graphData);
+});
+
+function initCharts(data) {
+  // 1. Spend & Savings Velocity Trend Chart
+  const trendCtx = document.getElementById('trendChartCanvas').getContext('2d');
+  trendChart = new Chart(trendCtx, {
+    type: 'bar',
+    data: {
+      labels: data.labels,
+      datasets: [
+        {
+          label: 'Gross Claimed (₹)',
+          data: data.claimed_series,
+          backgroundColor: 'rgba(15, 23, 42, 0.75)',
+          borderColor: '#0f172a',
+          borderWidth: 1.5,
+          borderRadius: 6,
+          order: 2,
+          yAxisID: 'y'
+        },
+        {
+          label: 'Approved Net (₹)',
+          data: data.approved_series,
+          backgroundColor: 'rgba(16, 185, 129, 0.8)',
+          borderColor: '#059669',
+          borderWidth: 1.5,
+          borderRadius: 6,
+          order: 3,
+          yAxisID: 'y'
+        },
+        {
+          label: 'Policy Savings (₹)',
+          data: data.savings_series,
+          backgroundColor: 'rgba(245, 158, 11, 0.8)',
+          borderColor: '#d97706',
+          borderWidth: 1.5,
+          borderRadius: 6,
+          order: 4,
+          yAxisID: 'y'
+        },
+        {
+          label: 'Claims Submitted (Count)',
+          data: data.count_series,
+          type: 'line',
+          borderColor: '#0284c7',
+          backgroundColor: 'rgba(2, 132, 199, 0.15)',
+          borderWidth: 2.5,
+          pointBackgroundColor: '#0284c7',
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          tension: 0.3,
+          order: 1,
+          yAxisID: 'yCount'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: 'index',
+        intersect: false
+      },
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: {
+            boxWidth: 14,
+            usePointStyle: true,
+            font: { family: "'DM Sans', sans-serif", weight: '600', size: 12 }
+          }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(15, 23, 42, 0.95)',
+          titleFont: { family: "'DM Sans', sans-serif", size: 13, weight: '700' },
+          bodyFont: { family: "'DM Mono', monospace", size: 12 },
+          padding: 12,
+          callbacks: {
+            label: function(context) {
+              const label = context.dataset.label || '';
+              const val = context.parsed.y;
+              if (context.dataset.yAxisID === 'yCount') {
+                return `  ${label}: ${val} claims`;
+              }
+              return `  ${label}: ₹${Number(val).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { font: { family: "'DM Sans', sans-serif", weight: '600' } }
+        },
+        y: {
+          type: 'linear',
+          display: true,
+          position: 'left',
+          beginAtZero: true,
+          grid: { color: 'rgba(226, 232, 240, 0.8)' },
+          ticks: {
+            font: { family: "'DM Mono', monospace" },
+            callback: function(value) {
+              return '₹' + Number(value).toLocaleString('en-IN');
+            }
+          }
+        },
+        yCount: {
+          type: 'linear',
+          display: true,
+          position: 'right',
+          beginAtZero: true,
+          grid: { drawOnChartArea: false },
+          ticks: {
+            font: { family: "'DM Mono', monospace" },
+            stepSize: 1,
+            callback: function(value) { return value + ' c'; }
+          }
+        }
+      }
+    }
+  });
+
+  // 2. Category Doughnut Chart
+  const categoryLabels = Object.keys(data.categories);
+  const categoryValues = Object.values(data.categories);
+  const catCtx = document.getElementById('categoryChartCanvas').getContext('2d');
+  categoryChart = new Chart(catCtx, {
+    type: 'doughnut',
+    data: {
+      labels: categoryLabels.length ? categoryLabels : ['No Data'],
+      datasets: [{
+        data: categoryValues.length ? categoryValues : [1],
+        backgroundColor: [
+          '#0d9488', '#0284c7', '#f59e0b', '#8b5cf6', '#ec4899', '#10b981', '#64748b'
+        ],
+        borderWidth: 2,
+        borderColor: '#ffffff',
+        hoverOffset: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            boxWidth: 12,
+            font: { family: "'DM Sans', sans-serif", size: 11, weight: '600' }
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              const val = context.raw || 0;
+              return ` ₹${Number(val).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+            }
+          }
+        }
+      },
+      cutout: '62%'
+    }
+  });
+
+  // 3. Status Verdict Doughnut Chart
+  const statusLabels = Object.keys(data.status_distribution);
+  const statusValues = Object.values(data.status_distribution);
+  const statCtx = document.getElementById('statusChartCanvas').getContext('2d');
+  statusChart = new Chart(statCtx, {
+    type: 'doughnut',
+    data: {
+      labels: statusLabels.length ? statusLabels : ['No Claims'],
+      datasets: [{
+        data: statusValues.length ? statusValues : [1],
+        backgroundColor: [
+          '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6', '#94a3b8'
+        ],
+        borderWidth: 2,
+        borderColor: '#ffffff',
+        hoverOffset: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            boxWidth: 12,
+            font: { family: "'DM Sans', sans-serif", size: 11, weight: '600' }
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              const val = context.raw || 0;
+              return ` ${val} claims (${context.label})`;
+            }
+          }
+        }
+      },
+      cutout: '62%'
+    }
+  });
+}
+
+// Switch between Monthly and Yearly
+function switchPeriod(period) {
+  if (currentPeriod === period) return;
+  currentPeriod = period;
+
+  document.querySelectorAll('#periodToggleGroup .segmented-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.period === period);
+  });
+
+  fetchAnalyticsData();
+}
+
+// Switch between Company, Project, and Person
+function switchScope(scope) {
+  if (currentScope === scope) return;
+  currentScope = scope;
+
+  document.querySelectorAll('#scopeToggleGroup .segmented-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.scope === scope);
+  });
+
+  // Reveal or hide selector dropdowns
+  document.getElementById('projectSelectWrap').style.display = (scope === 'project') ? 'inline-block' : 'none';
+  document.getElementById('personSelectWrap').style.display = (scope === 'person') ? 'inline-block' : 'none';
+
+  fetchAnalyticsData();
+}
+
+// Handle change in Project or Person dropdown
+function handleEntityChange() {
+  fetchAnalyticsData();
+}
+
+// Fetch live graph data from backend API
+async function fetchAnalyticsData() {
+  const loading = document.getElementById('loadingIndicator');
+  loading.style.display = 'inline-block';
+
+  let url = `/api/analytics/graph-data?period=${encodeURIComponent(currentPeriod)}&scope=${encodeURIComponent(currentScope)}`;
+  let entityLabel = 'Company-Wide';
+
+  if (currentScope === 'project') {
+    const prj = document.getElementById('projectSelect').value;
+    url += `&project_code=${encodeURIComponent(prj)}`;
+    entityLabel = `Project: ${prj}`;
+  } else if (currentScope === 'person') {
+    const emp = document.getElementById('personSelect').value;
+    url += `&employee=${encodeURIComponent(emp)}`;
+    entityLabel = `Person: ${emp}`;
+  }
+
+  // Update active view badge
+  const periodLabel = currentPeriod === 'monthly' ? 'Monthly Trend' : 'Yearly Fiscal Aggregate';
+  document.getElementById('activeViewChip').innerHTML = `<span style="font-size: 10px;">●</span> Viewing: ${entityLabel} · ${periodLabel}`;
+  document.getElementById('tablePeriodTag').textContent = `Aggregated by ${currentPeriod.charAt(0).toUpperCase() + currentPeriod.slice(1)}`;
+
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    updateUIWithData(data);
+  } catch (err) {
+    console.error('Failed to fetch analytics graph data:', err);
+  } finally {
+    loading.style.display = 'none';
+  }
+}
+
+// Update Charts, KPI Cards, and Ledger Table
+function updateUIWithData(data) {
+  // Update KPI Cards
+  document.getElementById('kpiClaimed').textContent = '₹' + Number(data.summary.total_claimed).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  document.getElementById('kpiApproved').textContent = '₹' + Number(data.summary.total_approved).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  document.getElementById('kpiSavings').textContent = '₹' + Number(data.summary.total_savings).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  document.getElementById('kpiClaims').textContent = data.summary.total_claims;
+  document.getElementById('kpiAvgClaim').textContent = '₹' + Number(data.summary.avg_claim).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  document.getElementById('kpiCompliance').textContent = data.summary.compliance_rate + '%';
+
+  // Update Trend Chart
+  if (trendChart) {
+    trendChart.data.labels = data.labels;
+    trendChart.data.datasets[0].data = data.claimed_series;
+    trendChart.data.datasets[1].data = data.approved_series;
+    trendChart.data.datasets[2].data = data.savings_series;
+    trendChart.data.datasets[3].data = data.count_series;
+    trendChart.update();
+  }
+
+  // Update Category Chart
+  if (categoryChart) {
+    const catLabels = Object.keys(data.categories);
+    const catValues = Object.values(data.categories);
+    categoryChart.data.labels = catLabels.length ? catLabels : ['No Data'];
+    categoryChart.data.datasets[0].data = catValues.length ? catValues : [0];
+    categoryChart.update();
+  }
+
+  // Update Status Chart
+  if (statusChart) {
+    const statLabels = Object.keys(data.status_distribution);
+    const statValues = Object.values(data.status_distribution);
+    statusChart.data.labels = statLabels.length ? statLabels : ['No Claims'];
+    statusChart.data.datasets[0].data = statValues.length ? statValues : [0];
+    statusChart.update();
+  }
+
+  // Update Table Rows
+  const tbody = document.getElementById('periodicTableBody');
+  if (data.table_rows && data.table_rows.length > 0) {
+    tbody.innerHTML = data.table_rows.map(r => {
+      const fillClass = r.compliance_pct >= 80 ? 'fill-green' : (r.compliance_pct >= 50 ? 'fill-amber' : 'fill-red');
+      return `
+        <tr>
+          <td><strong>${r.period}</strong></td>
+          <td class="font-mono">₹${Number(r.claimed).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          <td class="font-mono color-green">₹${Number(r.approved).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          <td class="font-mono color-amber">₹${Number(r.savings).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          <td><span class="id-badge">${r.count} claims</span></td>
+          <td><span class="trip-city-badge">${r.top_category}</span></td>
+          <td>
+            <div class="compliance-track" style="width: 120px;">
+              <div class="compliance-fill ${fillClass}" style="width: ${r.compliance_pct}%;"></div>
+            </div>
+            <span class="font-mono" style="font-size: 0.75rem;">${r.compliance_pct}% approved</span>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } else {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-state" style="text-align: center; padding: 24px;">No expense claims found for this selection.</td></tr>`;
+  }
+}
+</script>
 {% endblock %}
